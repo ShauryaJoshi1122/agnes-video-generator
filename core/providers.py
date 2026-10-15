@@ -37,6 +37,7 @@ class Provider:
         fill_guide: 检查点 → 回填指引。
         notes: 能力限制提示兜底（前端优先 ``notes_key``）。
         notes_key: i18n key。
+        url: 工具官网链接（前端「打开工具」按钮）。
     """
 
     id: str
@@ -48,6 +49,7 @@ class Provider:
     notes: str = ""
     name_key: str = ""
     notes_key: str = ""
+    url: str = ""
 
 
 _JIMENG_PROMPTS: Dict[str, str] = {
@@ -73,15 +75,9 @@ _JIMENG_PROMPTS: Dict[str, str] = {
         "3. 导出文件按 scene_1.png / scene_2.png … 命名，回填到 "
         "<任务目录>/scene_{i}/ref.png。"
     ),
-    "videos": (
-        "请用即梦的视频生成（开启\"生成音频\"），基于对应分镜图生成视频：\n"
-        "1. 每个片段时长按该场景的 duration 生成（即梦固定档位 5s/10s 时按最接近"
-        "档位，剩余由本项目尾帧补齐）；\n"
-        "2. 音频：与分镜提示词中的台词/音效描述一致，**导出的 mp4 必须保留音轨**；\n"
-        "3. 分辨率竖屏 9:16，导出 mp4；\n"
-        "4. 按 scene_1.mp4 / scene_2.mp4 … 命名，回填到 <任务目录>/scene_{i}/video.mp4"
-        "（或用\"批量导入\"）。"
-    ),
+    # 注：`videos` 检查点的「提示词」由任务数据动态组装（分镜脚本本身，见
+    # web/routes/video_routes.py::build_external_video_prompts），不在此声明静态模板；
+    # 该检查点的操作流程说明改由 fill_guide 承担。
     "subtitle": (
         "请确认 <任务目录>/combined_narration.srt 的每条字幕：\n"
         "1. 文案与场景台词逐字一致；\n"
@@ -109,10 +105,11 @@ _JIMENG_FILL_GUIDE: Dict[str, str] = {
         "3. 回填到 <任务目录>/scene_{i}/ref.png（或用「批量导入」一次选定多张）。"
     ),
     "videos": (
-        "1. 在即梦开启「生成音频」生成各场景视频；\n"
-        "2. 导出 mp4，按 scene_1.mp4 / scene_2.mp4 … 命名；\n"
-        "3. 回填到 <任务目录>/scene_{i}/video.mp4（推荐「批量导入」，自动归一化"
-        "分辨率/帧率/编码并回显体检结果）。"
+        "1. 点击「打开即梦」，新建视频生成任务；\n"
+        "2. 把上方提示词逐场景粘贴到即梦，开启「生成音频」，按各场景时长生成；\n"
+        "3. 导出 mp4，按 scene_1.mp4 / scene_2.mp4 … 命名；\n"
+        "4. 用下方「批量导入」回填（自动归一化分辨率/帧率/编码并回显体检结果），"
+        "或手动放到 <任务目录>/scene_{i}/video.mp4。"
     ),
     "subtitle": (
         "1. 若即梦可导出字幕时间轴，按 scene 顺序合并后回填；\n"
@@ -138,6 +135,7 @@ PROVIDERS: Dict[str, Provider] = {
         fill_guide=_JIMENG_FILL_GUIDE,
         notes="分镜视频档位为 5s/10s；导出的 mp4 必须保留音轨。",
         notes_key="providers.jimeng.notes",
+        url="https://jimeng.jianying.com/",
     ),
 }
 
@@ -209,6 +207,7 @@ def provider_public(pid: str, *, with_prompts: bool = False) -> dict:
         "capabilities": list(p.capabilities),
         "notes": p.notes,
         "notes_key": p.notes_key,
+        "url": p.url,
     }
     if with_prompts:
         data["checkpoint_prompts"] = dict(p.checkpoint_prompts)

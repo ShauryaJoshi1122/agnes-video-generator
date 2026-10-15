@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { t, currentLang as lang } from '@/i18n'
+import { t, tf, currentLang as lang } from '@/i18n'
 import { appState } from '@/store'
 import * as api from '@/api'
 import { useTasks } from '@/composables/useTasks'
@@ -48,7 +48,11 @@ async function loadCheckpoint() {
   loadingData.value = true
   try {
     const d = await api.getCheckpoint(props.taskId, props.checkpoint)
-    if (d.ok) checkpointData.value = d
+    if (d.ok) {
+      checkpointData.value = d
+      // v7.6 外部素材模式：videos 检查点以「即梦协作」为主，默认选中该卡片
+      if (d.external_hint && props.checkpoint === 'videos') activeCard.value = 'collab'
+    }
   } catch {
     /* ignore */
   } finally {
@@ -60,6 +64,12 @@ loadCheckpoint()
 // ── v7.6 外部素材模式：外部工具协作卡片（external_hint 非空时展示）──
 const collabHint = computed(() => checkpointData.value?.external_hint || null)
 const collabProvider = computed<any>(() => collabHint.value?.provider || {})
+const collabProviderName = computed(() => collabProvider.value.name || '')
+// v7.6：外部素材模式下 videos 检查点以「即梦协作」为主，隐藏其余操作方式卡片
+const collabPrimary = computed(() => !!collabHint.value && props.checkpoint === 'videos')
+// 协作卡内提示词标题（如「给 Jimeng (Dreamina) 的视频生成提示词」）
+const collabPromptLabel = computed(() =>
+  tf('checkpoint.collab.prompt_label', { name: collabProviderName.value }))
 // 可批量导入的检查点：参考图 → image，视频片段 → video
 const importKind = computed(() => (props.checkpoint === 'references' ? 'image' : props.checkpoint === 'videos' ? 'video' : ''))
 const canImport = computed(() => !!importKind.value && !!collabHint.value)
@@ -373,17 +383,18 @@ function artLabel(a: any): string {
       <span class="text-xs text-muted ml-3">{{ t('continueNoChangeHint') }}</span>
     </div>
 
-    <!-- 卡片：AI / 自己 / Agent / 在线编辑 +（v7.6）外部工具协作 -->
-    <div class="grid grid-cols-1 gap-3 mb-4" :class="collabHint ? 'md:grid-cols-5' : 'md:grid-cols-4'">
-      <button v-if="aiModifiableArts.length" class="p-3 rounded-xl border text-left transition" :class="activeCard === 'ai' ? 'border-accent bg-accent/10' : 'border-rule bg-paper-2/30 hover:border-accent/40'" @click="activeCard = 'ai'">
+    <!-- 卡片：AI / 自己 / Agent / 在线编辑 +（v7.6）外部工具协作。
+         外部素材模式的 videos 检查点仅保留「协作」卡片（其余方式无实际产物可改）。 -->
+    <div class="grid grid-cols-1 gap-3 mb-4" :class="collabPrimary ? 'md:grid-cols-1' : (collabHint ? 'md:grid-cols-5' : 'md:grid-cols-4')">
+      <button v-if="!collabPrimary && aiModifiableArts.length" class="p-3 rounded-xl border text-left transition" :class="activeCard === 'ai' ? 'border-accent bg-accent/10' : 'border-rule bg-paper-2/30 hover:border-accent/40'" @click="activeCard = 'ai'">
         <div class="text-sm font-medium text-ink-2">{{ t('handleAi') }}</div>
         <div class="text-xs text-muted mt-0.5">{{ t('handleAiDesc') }}</div>
       </button>
-      <button class="p-3 rounded-xl border text-left transition" :class="activeCard === 'self' ? 'border-accent bg-accent/10' : 'border-rule bg-paper-2/30 hover:border-accent/40'" @click="activeCard = 'self'">
+      <button v-if="!collabPrimary" class="p-3 rounded-xl border text-left transition" :class="activeCard === 'self' ? 'border-accent bg-accent/10' : 'border-rule bg-paper-2/30 hover:border-accent/40'" @click="activeCard = 'self'">
         <div class="text-sm font-medium text-ink-2">{{ t('handleSelf') }}</div>
         <div class="text-xs text-muted mt-0.5">{{ t('handleSelfDesc') }}</div>
       </button>
-      <div class="p-3 rounded-xl border transition flex flex-col" :class="activeCard === 'agent' ? 'border-accent bg-accent/10' : 'border-rule bg-paper-2/30 hover:border-accent/40'">
+      <div v-if="!collabPrimary" class="p-3 rounded-xl border transition flex flex-col" :class="activeCard === 'agent' ? 'border-accent bg-accent/10' : 'border-rule bg-paper-2/30 hover:border-accent/40'">
         <button class="text-left" @click="activeCard = 'agent'">
           <div class="text-sm font-medium text-ink-2">{{ t('handleAgent') }}</div>
           <div class="text-xs text-muted mt-0.5">{{ t('handleAgentDesc') }}</div>
@@ -391,7 +402,7 @@ function artLabel(a: any): string {
         <a :href="moreToolsHref" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-[10px] text-accent hover:text-ink transition-colors mt-1.5">🔗 {{ t('agentMoreTools') }}</a>
         <a href="https://github.com/lcy362/flint" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-[10px] text-accent hover:text-ink transition-colors mt-1.5">{{ t('handleAgentFlint') }}</a>
       </div>
-      <button class="p-3 rounded-xl border text-left transition"
+      <button v-if="!collabPrimary" class="p-3 rounded-xl border text-left transition"
         :class="editableTextArts.length
           ? (activeCard === 'edit' ? 'border-accent bg-accent/10' : 'border-rule bg-paper-2/30 hover:border-accent/40')
           : 'border-rule/40 bg-paper-2/20 opacity-45 cursor-not-allowed'"
@@ -474,13 +485,22 @@ function artLabel(a: any): string {
     <!-- v7.6 通道：外部工具协作 -->
     <div v-else-if="activeCard === 'collab' && collabHint" class="space-y-3">
       <div>
-        <label class="block text-xs text-muted mb-1">{{ t('agentPrompt') }}</label>
-        <textarea rows="5" readonly class="w-full glass-input rounded-lg px-3 py-2 text-xs text-ink font-mono resize-y" :value="collabHint.prompt"></textarea>
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <label class="block text-xs text-muted">{{ collabPromptLabel }}</label>
+          <a v-if="collabProvider.url" :href="collabProvider.url" target="_blank" rel="noopener"
+             class="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 glass-input rounded-lg transition hover:border-accent/40 shrink-0">
+            🔗 {{ tf('checkpoint.collab.open_tool', { name: collabProviderName }) }}
+          </a>
+        </div>
+        <textarea rows="8" readonly class="w-full glass-input rounded-lg px-3 py-2 text-xs text-ink font-mono resize-y" :value="collabHint.prompt"></textarea>
         <button class="mt-2 text-xs px-4 py-2 bg-accent text-accent-ink rounded-lg transition" @click="copyCollabPrompt">
           {{ copyingPrompt ? t('checkpoint.collab.copied') : t('checkpoint.collab.copy_prompt') }}
         </button>
       </div>
-      <p v-if="collabHint.fill_guide" class="text-xs text-muted whitespace-pre-wrap">📥 {{ collabHint.fill_guide }}</p>
+      <div v-if="collabHint.fill_guide" class="rounded-lg bg-paper/50 border border-rule/60 p-3 space-y-1">
+        <p class="text-xs font-medium text-ink-2">📖 {{ t('checkpoint.collab.guide_label') }}</p>
+        <p class="text-xs text-muted whitespace-pre-wrap">{{ collabHint.fill_guide }}</p>
+      </div>
       <p v-if="collabHint.notes" class="text-xs text-muted whitespace-pre-wrap">ℹ️ {{ collabHint.notes }}</p>
 
       <!-- 批量导入（仅 references / videos 检查点） -->

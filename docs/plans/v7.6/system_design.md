@@ -81,7 +81,7 @@ def has_capability(pid, cap) -> bool
 |------|------|
 | `GET /api/providers` | **新增**（`web/routes/utility_routes.py`）。返回注册表：`{"ok":true,"providers":[{id,name,icon,capabilities,notes}]}`（**不含**提示词模板，减小体积；模板走检查点详情） |
 | 创建端点（creative/manuscript/poetry/anchor） | `execution_mode` 增加 `external`；新增 `provider: str = Form("jimeng")`；`audio_source: str = Form("project")`（external 时前端传 `video`） |
-| `GET /api/tasks/{id}/checkpoints/{cp}` | 响应新增 `external_hint`：`{"provider":{id,name,icon},"prompt":"...","fill_guide":"...","notes":"..."}`；非 external 任务为 `null` |
+| `GET /api/tasks/{id}/checkpoints/{cp}` | 响应新增 `external_hint`：`{"provider":{id,name,icon,url},"prompt":"...","fill_guide":"...","notes":"..."}`；非 external 任务为 `null`。`videos` 检查点的 `prompt` **非静态模板**，由 `build_external_video_prompts`（[video_routes.py](file:///Users/lcy/video/agnes-video-generator/web/routes/video_routes.py)）按任务数据（`scenes[].scene_prompt` → `script_file` → `paragraphs`）逐场景组装为可粘贴的分镜提示词 |
 | `POST /api/tasks/{id}/artifacts/import` | **新增**：multipart `files[]` + `kind`（`image`/`video`）+ `scene_map`（JSON，`{"1":"scene_0",...}`，缺省按文件名序号/上传顺序映射到 `scene_{i}`）；服务端**归一化 + 探针回显** |
 | `GET /api/tasks/{id}/artifacts/probe?relpath=...` | **新增**：单文件探针（duration/width/height/fps/has_audio/vcodec/acodec） |
 
@@ -199,7 +199,8 @@ ffmpeg -i src -vf "scale=w:h:force_original_aspect_ratio=decrease,pad=w:h:(ow-iw
 ## 六、前端增量（P3）
 
 1. **创建面板**：执行模式三选一 `⚡自动 / ✋手动 / 🌐外部素材`；选中外部素材展开「视频生成工具」下拉（`GET /api/providers` 拉取）+ 「音频来源」`使用视频自带音频（推荐）/ 使用本项目配音`；提交时带 `execution_mode=external&provider=jimeng&audio_source=video`。
-2. **检查点页**：新增第四张卡片 `🎬 <工具名>协作`（`external_hint.prompt` 一键复制 + `fill_guide`）；`videos` 检查点附「批量导入」入口（多选文件 → `POST .../artifacts/import`）与探针回显。
+2. **检查点页**：新增第四张卡片 `🎬 <工具名>协作`（`external_hint.prompt` 一键复制 + `fill_guide` + 「🔗 打开工具」链接 `provider.url`）；`videos` 检查点附「批量导入」入口（多选文件 → `POST .../artifacts/import`）与探针回显。
+   - **`videos` 检查点特例**：进入即**默认选中协作卡片**并**隐藏其余操作方式卡片**（AI 帮改 / 自己改 / 外部 Agent / 在线编辑）——外部素材模式下这些通道无意义；卡片内「提示词」= 用户要粘贴进即梦的视频生成提示词（分镜脚本本身），并在下方给出「操作指引」（`fill_guide`）。
 3. **i18n**：新增 key 同步写入 `frontend/src/i18n/langs/zh.json` 与 `en.json`（铁律，`scripts/i18n_check.py` 必须通过）。
 
 ---

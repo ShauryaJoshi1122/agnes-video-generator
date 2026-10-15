@@ -9,6 +9,7 @@
 
 写路径隔离：通过 ``AGNES_REGRESSION_WORKING_DIR`` 环境变量把工作区指向 tmp_path。
 """
+import json
 import os
 import sys
 
@@ -57,14 +58,17 @@ def test_jimeng_capabilities_and_prompts():
     p = providers.get_provider("jimeng")
     for cap in ("native_audio", "duration_control", "subtitle_export", "image_gen"):
         assert providers.has_capability("jimeng", cap)
-    # 检查点提示词覆盖 scenes / references / videos / subtitle
-    for cp in ("scenes", "references", "videos", "subtitle"):
+    # 检查点静态模板覆盖 scenes / references / subtitle（videos 由任务数据动态组装）
+    for cp in ("scenes", "references", "subtitle"):
         assert cp in p.checkpoint_prompts
+    # videos 的「提示词」改为数据驱动，仅保留操作指引（fill_guide）
+    assert "videos" in p.fill_guide
+    assert p.url
 
 
 def test_render_prompt_fills_placeholders():
     prompt = providers.render_prompt(
-        "jimeng", "videos", "/tmp/taskdir",
+        "jimeng", "references", "/tmp/taskdir",
         {"scene_count": 3, "total_duration": 15},
     )
     assert "/tmp/taskdir" in prompt
@@ -76,6 +80,7 @@ def test_render_prompt_fills_placeholders():
 def test_provider_public_excludes_prompt_templates():
     pub = providers.provider_public("jimeng")
     assert pub["id"] == "jimeng"
+    assert pub["url"] == "https://jimeng.jianying.com/"
     assert "checkpoint_prompts" not in pub
     with_prompts = providers.provider_public("jimeng", with_prompts=True)
     assert "checkpoint_prompts" in with_prompts
@@ -328,7 +333,7 @@ def _seed_creative_task(task_id="exttask00001", execution_mode="external"):
             audio_source="video",
         ),
     )
-    state.scenes = [SceneTask(index=i) for i in range(2)]
+    state.scenes = [SceneTask(index=i, scene_prompt=f"scene {i} 画面描述") for i in range(2)]
     TaskManager(task_id, dir_name=task_id).create(state)
     return task_id
 
@@ -427,4 +432,38 @@ def test_external_hint_on_checkpoint(client):
     hint = resp.json()["external_hint"]
     assert hint is not None
     assert hint["provider"]["id"] == "jimeng"
-    assert hint["prompt"]
+    assert hint["provider"]["url"] == "https://jimeng.jianying.com/"
+    # videos 检查点的「提示词」= 逐场景分镜脚本（可直接粘贴到即梦），非操作流程说明
+    assert "【场景 1/2" in hint["prompt"] and "【场景 2/2" in hint["prompt"]
+    assert "scene 0 画面描述" in hint["prompt"] and "scene 1 画面描述" in hint["prompt"]
+    # 提示词必须只含画面描述本身，不得泄漏 SceneTask 模型 repr
+    assert "scene_prompt=" not in hint["prompt"]
+    assert "StepStatus" not in hint["prompt"] and "video_status=" not in hint["prompt"]
+    # 操作指引（含即梦操作步骤）单独下发
+    assert hint["fill_guide"]
+
+
+def test_build_external_video_prompts_from_script_file(tmp_path):
+    """creative：scenes[].scene_prompt 为空时回退 script.json；容忍 str/dict 两种形态。"""
+    from web.routes.video_routes import build_external_video_prompts
+
+    state = _creative_state()
+    state.scene_durations = [5, 10]
+    script = os.path.join(str(tmp_path), "script.json")
+    with open(script, "w", encoding="utf-8") as f:
+        json.dump(
+            ["第一段画面", {"scene_prompt": "第二段画面", "narration_text": "台词"}],
+            f, ensure_ascii=False,
+        )
+    state.script_file = script
+    out = build_external_video_prompts(state, str(tmp_path))
+    assert "第一段画面" in out
+    assert "第二段画面" in out
+    assert "5s" in out and "10s" in out
+
+    # 更贴近真实 creative 任务的形态：scenes 已登记但 scene_prompt 为空 →
+    # 必须回退 script.json，而不是把 SceneTask 的 repr 当成提示词（回归修复）
+    state.scenes = [SceneTask(index=i, scene_prompt="") for i in (0, 1)]
+    out2 = build_external_video_prompts(state, str(tmp_path))
+    assert "第一段画面" in out2 and "第二段画面" in out2
+    assert "scene_prompt=" not in out2 and "StepStatus" not in out2

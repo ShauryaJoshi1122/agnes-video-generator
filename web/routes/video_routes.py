@@ -408,7 +408,7 @@ def _build_external_hint(state, checkpoint: str, working_dir: str):
     from core.providers import get_provider, render_prompt
 
     p = get_provider(getattr(mc, "provider", "") or "")
-    if checkpoint not in p.checkpoint_prompts:
+    if checkpoint not in p.checkpoint_prompts and checkpoint not in p.fill_guide:
         return None
     durations = getattr(state, "scene_durations", None) or []
     scene_count = getattr(state, "scene_count", 0) or len(durations)
@@ -416,15 +416,84 @@ def _build_external_hint(state, checkpoint: str, working_dir: str):
         "scene_count": scene_count,
         "total_duration": sum(d for d in durations if isinstance(d, (int, float))),
     }
+    # v7.6：`videos` 检查点给的是「用户直接粘贴到即梦」的视频生成提示词（分镜脚本
+    # 本身），而非操作流程说明；其余检查点仍用声明的协作模板。
+    if checkpoint == "videos":
+        prompt = build_external_video_prompts(state, working_dir)
+    else:
+        prompt = render_prompt(p.id, checkpoint, working_dir, extra)
     return {
         "provider": {
             "id": p.id, "name": p.name, "name_key": p.name_key, "icon": p.icon,
+            "url": p.url,
         },
-        "prompt": render_prompt(p.id, checkpoint, working_dir, extra),
+        "prompt": prompt,
         "fill_guide": p.fill_guide.get(checkpoint, ""),
         "notes": p.notes,
         "notes_key": p.notes_key,
     }
+
+
+_SCENE_PROMPT_KEYS = ("scene_prompt", "description", "prompt", "text")
+
+
+def _scene_prompt_of(item) -> str:
+    """从分镜条目提取可用作即梦提示词的画面描述。
+
+    容忍三种形态：``SceneTask`` / ``Paragraph`` 等模型对象（读属性）、
+    ``dict``（读键）、纯字符串（原样返回）。**不得**把非字符串对象
+    ``str()`` 化——那会把模型 repr 当成提示词下发。
+    """
+    if isinstance(item, dict):
+        candidates = (item.get(k) for k in _SCENE_PROMPT_KEYS)
+    elif isinstance(item, str):
+        return item.strip()
+    else:
+        candidates = (getattr(item, k, None) for k in _SCENE_PROMPT_KEYS)
+    for v in candidates:
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
+
+
+def build_external_video_prompts(state, working_dir: str) -> str:
+    """按场景组装「可直接粘贴到即梦」的视频生成提示词（v7.6）。
+
+    数据来源按优先级：``state.scenes[].scene_prompt``（poetry / manuscript /
+    已登记场景）→ 分镜脚本文件 ``state.script_file``（creative：分镜描述落在
+    ``script.json``，``scenes[].scene_prompt`` 为空）→ ``state.paragraphs``
+    （稿件兜底）。每个场景附「场景序号 / 总时长」，便于用户逐段生成。
+
+    Returns:
+        已就绪的提示词文本；无可用分镜数据时返回空串。
+    """
+    texts = [_scene_prompt_of(s) for s in (getattr(state, "scenes", None) or [])]
+    if not any(texts):
+        script_file = getattr(state, "script_file", "") or ""
+        if script_file:
+            path = script_file if os.path.isabs(script_file) else os.path.join(working_dir, script_file)
+            if os.path.exists(path):
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        data = json.load(f)
+                    if isinstance(data, list):
+                        texts = [_scene_prompt_of(it) for it in data]
+                except (OSError, ValueError):
+                    logger.warning("[Diagnostics] external videos: failed to read %s", path)
+    if not any(texts):
+        texts = [_scene_prompt_of(p) for p in (getattr(state, "paragraphs", None) or [])]
+
+    texts = [t for t in texts if t]
+    if not texts:
+        return ""
+    durations = getattr(state, "scene_durations", None) or []
+    total = len(texts)
+    blocks = []
+    for i, txt in enumerate(texts):
+        dur = durations[i] if i < len(durations) else ""
+        header = f"【场景 {i + 1}/{total}" + (f" · {dur}s" if dur else "") + "】"
+        blocks.append(f"{header}\n{txt}")
+    return "\n\n".join(blocks)
 
 
 @router.get("/api/tasks/{task_id}/checkpoints/{checkpoint}/impact")
