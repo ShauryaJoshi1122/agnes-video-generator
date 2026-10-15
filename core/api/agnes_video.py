@@ -34,14 +34,6 @@ from utils.video import download_video
 
 logger = logging.getLogger(__name__)
 
-DURATION_PRESETS = {
-    5: (121, 24),
-    10: (241, 24),
-    15: (361, 24),
-    18: (409, 24),   # capped at 409 (API max for 720p); actual ~17s
-    20: (409, 24),   # capped at 409 (API max for 720p); actual ~17s
-}
-
 _UPLOAD_RETRY_BASE_DELAY_SECONDS = 30  # 上传退避基数：忙轨取固定值，故障轨取 base×(n+1)
 _UPLOAD_RETRY_MAX_ATTEMPTS = 10        # v7.2 上传忙轨次数封顶（等效旧的 300s 预算 ÷ 30s）
 
@@ -309,7 +301,7 @@ class AgnesVideoAPI:
     def __init__(
         self,
         api_key: str,
-        model: str = "agnes-video-v2.0",
+        model: str = "agnes-video-2.5-flash",
         default_duration: int = 5,
         max_retries: int = 5,
         retry_base_delay: float = 30.0,
@@ -492,45 +484,6 @@ class AgnesVideoAPI:
                     await asyncio.sleep(delay)
                 attempt += 1
         return None
-
-    # API frame limits by resolution tier (from Agnes API error messages)
-    _FRAME_LIMITS = {
-        "1080p": 169,
-        "720p": 409,
-        "480p": 961,
-    }
-
-    @staticmethod
-    def _get_max_frames(width: int, height: int) -> int:
-        """Get the maximum allowed num_frames for the given resolution."""
-        pixels = width * height
-        if pixels > 1280 * 720:
-            return 169   # 1080p tier
-        elif pixels > 854 * 480:
-            return 409   # 720p tier
-        else:
-            return 961   # 480p tier
-
-    def _get_frame_config(self, duration: Optional[int] = None,
-                          width: int = 1280, height: int = 720) -> tuple:
-        d = duration or self.default_duration
-        max_nf = self._get_max_frames(width, height)
-        if d in DURATION_PRESETS:
-            nf, fr = DURATION_PRESETS[d]
-            if nf <= max_nf:
-                return nf, fr
-            # preset exceeds limit for this resolution, cap it
-            logger.warning(
-                f"[AgnesVideo] Duration preset {d}s has {nf} frames, "
-                f"exceeds {max_nf} for {width}x{height}. Capping."
-            )
-            return max_nf, fr
-        best = None
-        for nf in range(9, min(410, max_nf + 1), 8):
-            fr = round(nf / d)
-            if 1 <= fr <= 60:
-                best = (nf, fr)
-        return best or DURATION_PRESETS[5]
 
     async def _poll_task(self, video_id: str, interval: int = 60,
                           max_poll_duration: int = 1800,
@@ -969,60 +922,19 @@ class AgnesVideoAPI:
         progress_callback=None,
         **kwargs,
     ) -> str:
-        # 2.5 系列模型（v6.2）：新参数协议（mode/seconds/size/aspect_ratio）
-        if is_v25_video_model(self.model):
-            return await self._submit_video_v25(
-                prompt=prompt,
-                reference_image_paths=reference_image_paths,
-                duration=duration,
-                width=width,
-                height=height,
-                seed=seed,
-                progress_callback=progress_callback,
-                **kwargs,
-            )
-        num_frames, frame_rate = self._get_frame_config(duration, width, height)
-
-        payload: dict = {
-            "model": self.model,
-            "prompt": prompt,
-            "width": width,
-            "height": height,
-            "num_frames": num_frames,
-            "frame_rate": frame_rate,
-        }
-
-        if seed is not None:
-            payload["seed"] = seed
-        if negative_prompt:
-            payload["negative_prompt"] = negative_prompt
-
-        resolved_refs = []
-        for p in reference_image_paths:
-            # 优化 2：入参处先归一化参考图（尺寸统一 + 体积压缩），再 resolve。
-            # URL/data: 透传、失败回退原图，安全无回归。
-            norm = await asyncio.to_thread(normalize_reference_path, p, width, height)
-            resolved_refs.append(await self._resolve_image_ref(norm))
-        n_refs = len(resolved_refs)
-
-        if n_refs == 0:
-            mode_desc = "text-to-video"
-        elif n_refs == 1:
-            payload["image"] = resolved_refs[0]
-            payload["mode"] = "ti2vid"
-            mode_desc = "image-to-video"
-        else:
-            payload["extra_body"] = {
-                "image": resolved_refs,
-                "mode": "keyframes",
-            }
-            mode_desc = f"keyframes ({n_refs} frames)"
-
-        logger.info(f"[AgnesVideo] {mode_desc}: {prompt[:80]}...")
-
-        video_id = await self._submit_with_retry(payload, mode_desc, progress_callback)
-        logger.info(f"[AgnesVideo] Video submitted: {video_id[:20]}...")
-        return video_id
+        # 2.5 系列为标准协议（v6.2）：mode / seconds / size / aspect_ratio。
+        # v2.0 渠道已于 2026-10-14 下线（docs/dev/agnes_video_upstream_behavior.md §4.0.2），
+        # 不再保留 width/height/num_frames 旧协议分支，统一走 2.5 提交路径。
+        return await self._submit_video_v25(
+            prompt=prompt,
+            reference_image_paths=reference_image_paths,
+            duration=duration,
+            width=width,
+            height=height,
+            seed=seed,
+            progress_callback=progress_callback,
+            **kwargs,
+        )
 
     @staticmethod
     def _width_height_to_aspect_ratio(width: int, height: int) -> str:
