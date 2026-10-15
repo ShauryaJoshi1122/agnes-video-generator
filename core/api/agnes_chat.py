@@ -191,20 +191,34 @@ class AgnesChatAPI:
         from core.config import get_settings
 
         timeout_retry_limit = 1
-        data = self._request_with_retry(
-            {
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.7,
-                "max_tokens": max_tokens,
-            },
-            timeout=get_settings().agnes_chat_timeout,
-            timeout_retry_limit=timeout_retry_limit,
-        )
-        return data["choices"][0]["message"]["content"]
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.7,
+            "max_tokens": max_tokens,
+        }
+        # 空响应守卫：缺失 / 空正文时重试一次，避免把 ``None`` 或 KeyError 直接
+        # 抛给上层（原实现为裸 ``data["choices"][0]["message"]["content"]``）。
+        content = ""
+        for attempt in range(2):
+            data = self._request_with_retry(
+                payload,
+                timeout=get_settings().agnes_chat_timeout,
+                timeout_retry_limit=timeout_retry_limit,
+            )
+            try:
+                content = data["choices"][0]["message"]["content"] or ""
+            except (KeyError, IndexError, TypeError):
+                content = ""
+            if isinstance(content, str) and content.strip():
+                return content
+            content = ""
+            if attempt == 0:
+                logger.warning("[AgnesChat] Empty chat response; retrying once...")
+        raise RuntimeError("Agnes Chat returned empty content after retry")
 
     def chat_json(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> dict:
         """Chat 调用并解析 JSON 响应（健壮版）。
