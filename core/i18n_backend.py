@@ -982,10 +982,6 @@ CATALOG: Dict[str, Dict[str, str]] = {
         "zh": "尚未导入以下场景视频，无法确认：第 {scenes} 场景",
         "en": "Scene video(s) not yet imported, cannot approve: scene(s) {scenes}",
     },
-    "checkpoint.approve.missing_audio": {
-        "zh": "以下场景视频缺少音轨（音频来源=视频），无法确认：第 {scenes} 场景",
-        "en": "Scene video(s) have no audio track (audio source = video), cannot approve: scene(s) {scenes}",
-    },
     "gallery.task_not_found": {
         "zh": "任务不存在",
         "en": "Task not found",

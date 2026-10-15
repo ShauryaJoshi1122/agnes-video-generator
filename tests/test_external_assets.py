@@ -520,31 +520,23 @@ def test_approve_videos_after_import_passes(client, monkeypatch):
 
 
 @pytest.mark.skipif(not _ffmpeg_available(), reason="ffmpeg 不可用")
-def test_approve_videos_requires_audio_track(client, monkeypatch):
-    """音频来源=视频时，已导入但无音轨 → 422（音轨校验）。"""
+def test_approve_videos_without_audio_track_passes(client, monkeypatch):
+    """音频来源=视频时，已导入视频即使无音轨也放行（音轨由用户自行负责）。"""
     tid = _seed_creative_task(task_id="approve00003", audio_source="video")
     imp = _import_fixture_videos(client, tid)
     assert imp.status_code == 200 and imp.json()["imported"] == 2
 
-    resp = client.post(
-        f"/api/tasks/{tid}/checkpoints/videos/approve", data={"confirmed": "true"},
-    )
-    assert resp.status_code == 422, resp.text
-    assert "1, 2" in resp.json()["detail"]
-
-    # 音轨探测命中（替身）→ 放行
     import web.routes.task_routes as task_routes
-
-    monkeypatch.setattr(video_routes, "probe_media", lambda _p: {"has_audio": True})
 
     async def _fake_resume(task_id):
         return {"ok": True, "resumed": True, "task_id": task_id}
 
     monkeypatch.setattr(task_routes, "resume_task", _fake_resume)
-    resp2 = client.post(
+    resp = client.post(
         f"/api/tasks/{tid}/checkpoints/videos/approve", data={"confirmed": "true"},
     )
-    assert resp2.status_code == 200, resp2.text
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ok"] is True
 
 
 # ═══════════════════════════════════════════════

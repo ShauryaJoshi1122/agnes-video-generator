@@ -792,14 +792,14 @@ def _validate_external_videos(state) -> None:
     """外部素材模式确认 ``videos`` 检查点前的磁盘校验（v7.6）。
 
     逐个场景按 :func:`_resolve_scene_target` 算出期望视频的相对路径，校验文件
-    已导入；``audio_source == "video"``（保留视频自带音轨）时还需各视频含音轨。
-    任一缺失即抛 ``HTTPException(422)``，避免「未导入却被放行」。
+    已导入；任一缺失即抛 ``HTTPException(422)``，避免「未导入却被放行」。
+    视频是否含音轨由用户自行负责，不在此拦截。
 
     Args:
         state: 任务状态（含 ``manual_config`` / ``scene_count`` / ``scenes``）。
 
     Raises:
-        HTTPException: 有场景视频缺失（422）或缺音轨（422）。
+        HTTPException: 有场景视频缺失（422）。
     """
     mc = getattr(state, "manual_config", None)
     if not mc or getattr(mc, "execution_mode", "auto") != "external":
@@ -838,22 +838,6 @@ def _validate_external_videos(state) -> None:
                 scenes=", ".join(str(n) for n in missing),
             ),
         )
-
-    if getattr(mc, "audio_source", "project") == "video":
-        no_audio = [
-            i + 1 for i, rel in enumerate(relpaths)
-            if os.path.isfile(os.path.join(tm.task_dir, rel))
-            and not probe_media(os.path.join(tm.task_dir, rel)).get("has_audio")
-        ]
-        if no_audio:
-            raise HTTPException(
-                status_code=422,
-                detail=translate(
-                    "checkpoint.approve.missing_audio",
-                    ui_lang,
-                    scenes=", ".join(str(n) for n in no_audio),
-                ),
-            )
 
 
 @router.post("/api/tasks/{task_id}/checkpoints/{checkpoint}/approve")

@@ -162,7 +162,7 @@
 |---|---|---|---|
 | `scenes` | `script.json` / `prompts.json` + **即梦提示词** | — | ✅ |
 | `references` | 参考图位（可空） | `scene_{i}/ref*.png`（即梦分镜图） | ✅ |
-| `videos` | — | `scene_{i}/video.mp4`（即梦，带音轨） | ✅（**approve 前校验已导入**，缺失/无音轨 → 422） |
+| `videos` | — | `scene_{i}/video.mp4`（即梦，带音轨） | ✅（**approve 前校验已导入**，缺失 → 422；音轨由用户自行负责） |
 | `audio` | `combined_narration.mp3`（仅"本项目配音"时） | —（外部音频模式跳过） | 条件 |
 | `subtitle` | `combined_narration.srt` | （可选）即梦侧字幕回填 | ✅ |
 | `final` | `final_video.mp4` | — | ✅ |

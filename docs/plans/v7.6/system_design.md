@@ -157,9 +157,8 @@ def _build_manual_config(execution_mode: str, pause_points: str,
    `_validate_external_videos`）：`confirmed=true` 时，若 `execution_mode=external` 且
    `checkpoint=videos`，按 `_resolve_scene_target(task_type, "video", {}, i)` 逐场景算期望相对路径
    （creative→`scene_{i}/video.mp4`、manuscript→`para_{i}/video.mp4`、anchor→`clip/clip.mp4`；
-   场景数取 `scene_count`，兜底 `len(scenes)`），缺失 → **422**（`checkpoint.approve.missing_videos`）；
-   `audio_source=video` 时再用 `probe_media` 校验 `has_audio`，缺音轨 → **422**
-   （`checkpoint.approve.missing_audio`）。
+   场景数取 `scene_count`，兜底 `len(scenes)`），缺失 → **422**（`checkpoint.approve.missing_videos`）。
+   **不校验音轨**——视频是否含音轨由用户自行负责（导入回显会标黄提醒）。
 2. **keep-audio 时本项目完全不产出音频**：`_generate_audio_with_fallback` 开头守卫
    `if self._keeps_video_audio(): return None`（覆盖全部调用点），**不写 `combined_narration.mp3`、
    不调 edge_tts、不采 cues**；字幕改按 `resolve_segment_durations` 的**真实时长**对齐
