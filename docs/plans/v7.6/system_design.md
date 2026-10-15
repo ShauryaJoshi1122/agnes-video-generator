@@ -125,6 +125,10 @@ def _build_manual_config(execution_mode: str, pause_points: str,
    「场景视觉提示词用英文」约定；外部模式改为要求分镜提示词**与输入原文语言一致**
    （不翻译成英文），使交给外部工具（即梦）的分镜语言与用户输入原文一致。
    creative `_style_with_language_directive()` 按 `_is_external()` 传入该开关。
+   **中文输入修正**：非外部模式对中文输入无指令（`external=False` 仍返回空串）；
+   外部模式不再提前返回，改为显式钉住中文——否则默认 en meta-prompt（language
+   pinning）叠加英文 style 会把中文 idea 的故事/分镜写成英文（2026-10-15 实测复现，
+   该指令同时作用于 develop_story 与 write_script 两步）。
 
 ### 4.2 keep-audio 接线收口（P0/P2 实际落点）
 

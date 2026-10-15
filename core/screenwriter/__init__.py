@@ -60,7 +60,9 @@ def build_input_language_directive(text: str, external: bool = False) -> str:
     中文故事/旁白（2026-08-31 实测复现）。仅靠 pinning 不足，需要一条显式目标
     语言指令前置到 style——与 preview 端点的 ``_language_directive`` 同机制。
 
-    中文/无法识别脚本返回空串（无指令，保持既有行为）。
+    中文输入：非外部模式返回空串（无指令，保持既有行为）；**外部素材模式**下画面
+    提示词直接交给外部工具生成，需显式钉住中文——默认英文 meta-prompt（language
+    pinning）叠加英文 style 会把中文 idea 的故事/分镜写英文（2026-10-15 实测复现）。
 
     Args:
         text: 输入文本（创意流水线为 idea），用于检测主要文字体系。
@@ -75,9 +77,11 @@ def build_input_language_directive(text: str, external: bool = False) -> str:
     if not text or not text.strip():
         return ""
     script = detect_text_script(text)
-    if script in ("zh", "unknown"):
+    if script == "unknown":
         return ""
-    labels = {"arabic": "Arabic", "ru": "Russian", "ja": "Japanese", "ko": "Korean"}
+    if script == "zh" and not external:
+        return ""
+    labels = {"zh": "Chinese", "arabic": "Arabic", "ru": "Russian", "ja": "Japanese", "ko": "Korean"}
     label = labels.get(script)
     if label:
         head = (

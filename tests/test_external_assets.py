@@ -271,6 +271,14 @@ def test_external_mode_scene_prompt_language_follows_input():
     assert "still write in English" not in d
     assert "SAME language as the input idea" in d
 
+    # 中文输入：非外部模式仍返回空串；外部模式显式钉住中文，
+    # 避免英文 meta-prompt / 英文 style 把中文 idea 写成英文故事/分镜。
+    zh_idea = "海边小镇的暖心故事"
+    assert build_input_language_directive(zh_idea) == ""
+    zh = build_input_language_directive(zh_idea, external=True)
+    assert "Chinese" in zh
+    assert "still write in English" not in zh
+
 
 def test_creative_external_style_directive(tmp_path, monkeypatch):
     """creative：外部模式下 style 指令不再要求分镜英文；manual 模式不变。"""
