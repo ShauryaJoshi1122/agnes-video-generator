@@ -162,10 +162,17 @@
 |---|---|---|---|
 | `scenes` | `script.json` / `prompts.json` + **即梦提示词** | — | ✅ |
 | `references` | 参考图位（可空） | `scene_{i}/ref*.png`（即梦分镜图） | ✅ |
-| `videos` | — | `scene_{i}/video.mp4`（即梦，带音轨） | ✅ |
+| `videos` | — | `scene_{i}/video.mp4`（即梦，带音轨） | ✅（**approve 前校验已导入**，缺失/无音轨 → 422） |
 | `audio` | `combined_narration.mp3`（仅"本项目配音"时） | —（外部音频模式跳过） | 条件 |
 | `subtitle` | `combined_narration.srt` | （可选）即梦侧字幕回填 | ✅ |
 | `final` | `final_video.mp4` | — | ✅ |
+
+> **keep-audio 不产音频**：选「使用视频自带音频」时，本项目**完全不产出音频**——不写
+> `combined_narration.mp3`、不调 edge_tts、不采 cues（`_generate_audio_with_fallback` 开头守卫短路）；
+> 字幕改按各分镜**真实时长**对齐，不依赖该 mp3。
+> **字幕来源 `subtitle_source`**（仅 external 生效）：`narration`（旁白，默认）/ `dialogue`（人物对白）。
+> `dialogue` 时 creative 编剧阶段逐场景生成对白落 `scenes[].dialogue`（其余任务回退旁白），
+> `videos` 提示词每场景附「台词（对白）」，字幕文本取自各场景 `dialogue`（空回退 narration）。
 
 **回填增强（P1）**：
 - **批量导入**：一次选定即梦导出的多个 mp4 / png，按序号或 mtime 顺序映射到 `scene_{1..n}`（替代逐个上传）；
@@ -196,6 +203,10 @@
 | `video`（默认） | 保留视频自带音轨，**不生成 TTS** | 按段估时 | 即梦链路 |
 | `project` | 丢弃原音轨，用本项目 edge_tts | cues 精确 | 现状默认 |
 | `mix`（可选） | 原音轨 + 本项目 TTS 混音（原音轨降为"音效背景"） | cues 精确 | 需要旁白 + 环境声 |
+
+> 另立**字幕来源** `subtitle_source`（仅 external 生效）：`narration`（旁白，字幕取 `state.narrations`）
+> / `dialogue`（人物对白，字幕取各场景 `scenes[].dialogue`，空回退 narration）。`dialogue` 时
+> `videos` 检查点提示词逐场景附「台词（对白）」，`subtitle` 检查点 SRT 文案随之为对白。
 
 ### 4.2 时长与对齐
 
@@ -253,6 +264,9 @@
 同一卧室环境（保持角色外貌/光线连续），主角起身推窗……
 ```
 
+> 当 `subtitle_source=dialogue` 时，每个场景块末尾追加一行「台词（对白）：<scenes[].dialogue>」，
+> 供用户把对白交给即梦并保证与成片字幕一致。
+
 **操作指引（`fill_guide`，同时给出「打开即梦」官网链接 `provider.url`）**：
 
 ```
@@ -282,7 +296,7 @@
 
 | 端点 | 变更 |
 |------|------|
-| `POST /api/tasks/*`（创建） | 新增 `execution_mode="external"`；新增 `provider`（首期仅 `"jimeng"`，见 §2.4）；`audio_source`（`video`/`project`/`mix`）；`subtitle_enabled` |
+| `POST /api/tasks/*`（创建） | 新增 `execution_mode="external"`；新增 `provider`（首期仅 `"jimeng"`，见 §2.4）；`audio_source`（`video`/`project`/`mix`）；`subtitle_source`（`narration`/`dialogue`，非 external 忽略，非法值 422）；`subtitle_enabled` |
 | `GET /api/providers` | 返回外部工具注册表（§2.4）：id / name / icon / capabilities / 各检查点提示词模板 |
 | `GET /api/tasks/{id}/checkpoints/{name}` | 检查点详情新增 `external_hint`（**按任务 `provider` 渲染**的提示词模板，占位已填充） |
 | `POST /api/tasks/{id}/artifacts/import` | **批量导入**外部产物：`multipart` 多文件 + `kind`（`image`/`video`）+ `scene_map`；服务端归一化 + 探针回显 |

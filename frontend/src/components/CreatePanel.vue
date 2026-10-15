@@ -177,6 +177,19 @@ function selectExecMode(mode: 'auto' | 'manual' | 'external') {
             </label>
           </div>
         </div>
+        <div>
+          <label class="block text-xs text-muted mb-1">{{ t('execMode.subtitle_source') }}</label>
+          <div class="flex flex-col gap-1.5">
+            <label class="flex items-center gap-2 text-sm text-ink-2 cursor-pointer">
+              <input v-model="appState.externalSubtitleSource" type="radio" name="ext_subtitle_source" value="narration" class="text-accent" />
+              <span>{{ t('execMode.subtitle_source.narration') }}</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm text-ink-2 cursor-pointer">
+              <input v-model="appState.externalSubtitleSource" type="radio" name="ext_subtitle_source" value="dialogue" class="text-accent" />
+              <span>{{ t('execMode.subtitle_source.dialogue') }}</span>
+            </label>
+          </div>
+        </div>
         <p class="text-xs text-muted max-w-2xl basis-full">{{ t('execMode.external_hint') }}</p>
       </div>
 

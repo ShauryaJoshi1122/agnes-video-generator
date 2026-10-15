@@ -82,6 +82,7 @@ def _build_manual_config(
     provider: str = "jimeng",
     audio_source: str = "project",
     task_kind: str = "creative",
+    subtitle_source: str = "narration",
 ) -> ManualConfig:
     """构建手动/外部素材模式配置（v6.0 / v7.6）。
 
@@ -92,9 +93,12 @@ def _build_manual_config(
         provider: external 模式下所选外部工具 id（非法/空回退 "jimeng"）。
         audio_source: "project"（本项目 TTS）或 "video"（保留视频自带音轨）。
         task_kind: creative / manuscript / poetry / anchor，决定 external 默认暂停点。
+        subtitle_source: external 模式字幕来源（"narration" 旁白 / "dialogue" 人物对白）；
+            非 external 时忽略（强制 narration）。
 
     Raises:
-        HTTPException: execution_mode / pause_points / audio_source 非法。
+        HTTPException: execution_mode / pause_points / audio_source /
+            subtitle_source 非法。
     """
     if execution_mode not in ("auto", "manual", "external"):
         raise HTTPException(
@@ -112,6 +116,11 @@ def _build_manual_config(
     points = _parse_pause_points(pause_points)
 
     if execution_mode == "external":
+        if subtitle_source not in ("narration", "dialogue"):
+            raise HTTPException(
+                status_code=422,
+                detail=translate("validation.subtitle_source_invalid", None),
+            )
         from core.providers import get_provider
 
         return ManualConfig(
@@ -121,6 +130,7 @@ def _build_manual_config(
             execution_mode="external",
             provider=get_provider(provider).id,   # 非法/空 → 回退 jimeng
             audio_source=audio_source,
+            subtitle_source=subtitle_source,
         )
 
     # manual（空 = 全部检查点暂停，PRD §4.3）
@@ -385,6 +395,7 @@ async def create_creative_task(
     pause_points: str = Form(""),
     provider: str = Form("jimeng"),
     audio_source: str = Form("project"),
+    subtitle_source: str = Form("narration"),
 ):
     """创建创意长视频任务（类型 2）。"""
     api_key = get_api_key()
@@ -392,7 +403,8 @@ async def create_creative_task(
         raise HTTPException(status_code=400, detail=api_key_missing_msg())
 
     manual_config = _build_manual_config(
-        execution_mode, pause_points, provider, audio_source, "creative")
+        execution_mode, pause_points, provider, audio_source, "creative",
+        subtitle_source)
     # 外部素材 + 音频来源=视频 → 用视频自带音轨，禁用本项目 TTS
     if _external_video_audio(manual_config):
         audio_enabled = False
@@ -557,6 +569,7 @@ async def create_manuscript_task(
     pause_points: str = Form(""),
     provider: str = Form("jimeng"),
     audio_source: str = Form("project"),
+    subtitle_source: str = Form("narration"),
 ):
     """创建稿件长视频任务（类型 3）。"""
     api_key = get_api_key()
@@ -564,7 +577,8 @@ async def create_manuscript_task(
         raise HTTPException(status_code=400, detail=api_key_missing_msg())
 
     manual_config = _build_manual_config(
-        execution_mode, pause_points, provider, audio_source, "manuscript")
+        execution_mode, pause_points, provider, audio_source, "manuscript",
+        subtitle_source)
     if _external_video_audio(manual_config):
         audio_enabled = False
 
@@ -687,6 +701,7 @@ async def create_poetry_task(
     pause_points: str = Form(""),
     provider: str = Form("jimeng"),
     audio_source: str = Form("project"),
+    subtitle_source: str = Form("narration"),
 ):
     """创建诗词视频任务（类型 6）。"""
     api_key = get_api_key()
@@ -694,7 +709,8 @@ async def create_poetry_task(
         raise HTTPException(status_code=400, detail=api_key_missing_msg())
 
     manual_config = _build_manual_config(
-        execution_mode, pause_points, provider, audio_source, "poetry")
+        execution_mode, pause_points, provider, audio_source, "poetry",
+        subtitle_source)
     if _external_video_audio(manual_config):
         audio_enabled = False
 
@@ -820,6 +836,7 @@ async def create_anchor_task(
     execution_mode: str = Form("auto"),
     pause_points: str = Form(""),
     provider: str = Form("jimeng"),
+    subtitle_source: str = Form("narration"),
 ):
     """创建数字人口播任务（类型 4 / Phase 3）。"""
     api_key = get_api_key()
@@ -834,7 +851,8 @@ async def create_anchor_task(
         asset_audio_source = "project"
 
     manual_config = _build_manual_config(
-        execution_mode, pause_points, provider, asset_audio_source, "anchor")
+        execution_mode, pause_points, provider, asset_audio_source, "anchor",
+        subtitle_source)
     if _external_video_audio(manual_config):
         audio_enabled = False
 

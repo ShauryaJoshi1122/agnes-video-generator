@@ -425,6 +425,20 @@ class BasePipeline(ABC):
             and getattr(mc, "audio_source", "project") == "video"
         )
 
+    def _use_dialogue_subtitles(self) -> bool:
+        """字幕是否取「人物对白」而非旁白（v7.6 外部素材模式）。
+
+        仅当 ``execution_mode == "external"`` 且 ``subtitle_source == "dialogue"``
+        时为真；此时字幕文本来源切换为各场景 ``dialogue``（空则回退旁白），
+        音频/TTS 仍走旁白（字幕来源与音频来源相互独立）。
+        """
+        mc = getattr(getattr(self, "_state", None), "manual_config", None)
+        return bool(
+            mc
+            and getattr(mc, "execution_mode", "auto") == "external"
+            and getattr(mc, "subtitle_source", "narration") == "dialogue"
+        )
+
     def resolve_segment_durations(self, video_paths: list, fallback: list) -> list:
         """解析字幕分段时长（v7.6）：外部素材模式用视频真实时长，否则用计划时长。
 
@@ -850,6 +864,8 @@ class BasePipeline(ABC):
         五处复制的"EdgeTTS → Silent 降级 + harvest_cues"逻辑（v5.0 Batch 2）。
 
         行为矩阵：
+            0. 外部素材模式保留视频自带音轨（:meth:`_keeps_video_audio`）：直接返回
+               None，不落盘、不调用 EdgeTTS、不采集 cues（本项目不产出任何音频）。
             1. text 为空：empty_placeholder="" → 跳过返回 None（不落盘）；
                非空 → 以占位文本直接走 Silent 落盘（不调用 EdgeTTS）。
             2. audio_config.enabled → EdgeTTSEngine.generate：
@@ -871,6 +887,16 @@ class BasePipeline(ABC):
         Returns:
             SubMaker cues 对象（有 cues 可用时）；否则 None。
         """
+        # v7.6 外部素材模式（保留视频自带音轨）：本项目**完全不产出音频** ——
+        # 不写 combined_narration.mp3、不调用 edge_tts、不采集 cues；字幕改按
+        # 各场景视频真实时长对齐（见 :meth:`resolve_segment_durations`）。
+        if self._keeps_video_audio():
+            logger.info(
+                "[Audio] external keep-audio mode: skip project audio generation: %s",
+                output_path,
+            )
+            return None
+
         from core.audio.tts import EdgeTTSEngine, SilentTTSEngine
 
         audio_enabled = bool(getattr(audio_config, "enabled", True))
@@ -892,15 +918,6 @@ class BasePipeline(ABC):
             return None
 
         silent_tts = SilentTTSEngine()
-
-        # v7.6 外部素材模式（保留视频自带音轨）：本项目不生成/采集 TTS 音频或 cues，
-        # 只落一段静音占位（合成层会走 keep-audio 路径，字幕按视频真实时长对齐）。
-        if self._keeps_video_audio():
-            await silent_tts.generate(
-                text=text, output_path=output_path,
-                **({"duration_sec": duration_sec} if duration_sec else {}),
-            )
-            return None
 
         # 路径 A：音频开 → EdgeTTS 生成
         if audio_enabled:

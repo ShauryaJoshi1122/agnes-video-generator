@@ -720,6 +720,46 @@ class TestExternalCreativePipeline(BasePipelineTest):
         assert "end_frame.png" not in scene_files, \
             f"unexpected project-generated end frame: {scene_files}"
 
+    @pytest.mark.asyncio
+    async def test_external_keep_audio_full_run_no_project_audio(self, temp_workdir):
+        """外部素材 + 保留视频自带音轨：回填视频后跑完整条流水线，
+        本项目**不产出** combined_narration.mp3，仍合成出最终视频（缺陷 2 回归）。"""
+        from core.pipelines.creative.pipeline import CreativeVideoPipeline
+        from utils.video import normalize_external_video
+
+        _ASSETS = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "mock_regression", "assets",
+        )
+        fixture = os.path.join(_ASSETS, "test_video_5s.mp4")
+        if not os.path.exists(fixture):
+            pytest.skip("fixture video missing")
+
+        state = await self._make_state()
+        state.audio_config = AudioConfig(enabled=False)
+        pipeline = CreativeVideoPipeline(
+            api_key="mock_key", task_id="test_external_keep_audio",
+            dir_name=temp_workdir,
+        )
+
+        scene_dir = os.path.join(temp_workdir, "scene_0")
+        for _ in range(8):
+            await pipeline.run(state)
+            if state.status != StepStatus.PENDING or not state.manual_config.current_checkpoint:
+                break
+            cp = state.manual_config.current_checkpoint
+            if cp == "videos":
+                os.makedirs(scene_dir, exist_ok=True)
+                normalize_external_video(
+                    fixture, os.path.join(scene_dir, "video.mp4"), 768, 1152,
+                )
+            state.manual_config.approved_checkpoints.append(cp)
+
+        assert state.status == StepStatus.COMPLETED, f"pipeline not completed: {state.status}"
+        assert not os.path.exists(os.path.join(temp_workdir, "combined_narration.mp3")), \
+            "keep-audio mode must not produce combined_narration.mp3"
+        assert state.final_video_file and os.path.exists(state.final_video_file)
+
 
 # ══════════════════════════════════════════════════════════════════════
 # 入口

@@ -53,6 +53,7 @@ async function submitAnchor() {
       if (appState.execMode === 'external') {
         fd.append('audio_source', appState.externalAudioSource)
         fd.append('provider', appState.providerSelected || 'jimeng')
+        fd.append('subtitle_source', appState.externalSubtitleSource)
       } else {
         fd.append('audio_source', form.audioSource)
       }

@@ -149,6 +149,33 @@ def _build_manual_config(execution_mode: str, pause_points: str,
   poetry [`_generate_subtitles`](file:///Users/lcy/video/agnes-video-generator/core/pipelines/poetry_video.py)
   在 keep-audio 时传 `audio_path=""` 并以各分镜真实时长为分段时长。
 
+### 4.3 v7.6 收口补丁（approve 校验 / 不产音频 / 字幕来源）
+
+> 2026-10-15 三项修复，不改变既有契约，仅补齐外部素材模式的边界行为。
+
+1. **`videos` 检查点 approve 前校验磁盘产物**（[video_routes.py](file:///Users/lcy/video/agnes-video-generator/web/routes/video_routes.py)
+   `_validate_external_videos`）：`confirmed=true` 时，若 `execution_mode=external` 且
+   `checkpoint=videos`，按 `_resolve_scene_target(task_type, "video", {}, i)` 逐场景算期望相对路径
+   （creative→`scene_{i}/video.mp4`、manuscript→`para_{i}/video.mp4`、anchor→`clip/clip.mp4`；
+   场景数取 `scene_count`，兜底 `len(scenes)`），缺失 → **422**（`checkpoint.approve.missing_videos`）；
+   `audio_source=video` 时再用 `probe_media` 校验 `has_audio`，缺音轨 → **422**
+   （`checkpoint.approve.missing_audio`）。
+2. **keep-audio 时本项目完全不产出音频**：`_generate_audio_with_fallback` 开头守卫
+   `if self._keeps_video_audio(): return None`（覆盖全部调用点），**不写 `combined_narration.mp3`、
+   不调 edge_tts、不采 cues**；字幕改按 `resolve_segment_durations` 的**真实时长**对齐
+   （字幕步骤不依赖该 mp3）。
+3. **新增「字幕来源」`subtitle_source`**（`narration` 旁白 / `dialogue` 人物对白，仅 external 生效）：
+   - 模型：`ManualConfig.subtitle_source`（默认 `narration`）+ `SceneTask.dialogue`（默认 `""`）；
+   - 创建端点（creative/manuscript/poetry/anchor）新增 `subtitle_source: str = Form("narration")`，
+     非 external 忽略 / 强制 `narration`，非法值 → **422**（`validation.subtitle_source_invalid`）；
+   - 对白生成：external + `dialogue` 时 creative 编剧阶段逐场景生成对白落 `scenes[].dialogue`
+     （`Screenwriter.write_dialogues`），其余任务回退旁白（日志说明）；
+   - `build_external_video_prompts` 在 external + `dialogue` 时于每场景块末追加
+     「台词（对白）：<dialogue>」；
+   - 字幕文本来源从 `state.narrations` 换成各场景 `dialogue`（空回退 narration）：
+     creative `_step_subtitle` 与 multi_scene `_get_segment_texts_and_durations` 生效；
+     时长 / 换行 / SRT 逻辑不变。
+
 ---
 
 ## 五、流水线增量

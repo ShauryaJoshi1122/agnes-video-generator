@@ -367,7 +367,13 @@ class AudioStepsMixin:
         num_scenes = len(self._state.scenes)
 
         # ── 准备场景文本和时长 ──
-        if num_scenes > 1:
+        if self._use_dialogue_subtitles():
+            # v7.6 外部素材模式 · 对白字幕：逐场景取 dialogue，空则回退旁白
+            scene_texts = [
+                (getattr(s, "dialogue", "") or s.narration_text or "")
+                for s in self._state.scenes
+            ]
+        elif num_scenes > 1:
             scene_texts = self._state.narrations[:]
             if len(scene_texts) == 1 and num_scenes > 1:
                 scene_texts = _split_narration_into_scenes(

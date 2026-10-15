@@ -313,7 +313,8 @@ def client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
-def _seed_creative_task(task_id="exttask00001", execution_mode="external"):
+def _seed_creative_task(task_id="exttask00001", execution_mode="external",
+                        audio_source="video", subtitle_source="narration"):
     """在工作区落一个 creative 任务（external 模式，2 场景）。"""
     state = CreativeVideoTask(
         task_id=task_id,
@@ -330,7 +331,8 @@ def _seed_creative_task(task_id="exttask00001", execution_mode="external"):
             pause_points=["videos"],
             execution_mode=execution_mode,
             provider="jimeng",
-            audio_source="video",
+            audio_source=audio_source,
+            subtitle_source=subtitle_source,
         ),
     )
     state.scenes = [SceneTask(index=i, scene_prompt=f"scene {i} 画面描述") for i in range(2)]
@@ -467,3 +469,143 @@ def test_build_external_video_prompts_from_script_file(tmp_path):
     out2 = build_external_video_prompts(state, str(tmp_path))
     assert "第一段画面" in out2 and "第二段画面" in out2
     assert "scene_prompt=" not in out2 and "StepStatus" not in out2
+
+
+# ═══════════════════════════════════════════════
+# 检查点 approve：外部素材 videos 校验（v7.6 缺陷 1）
+# ═══════════════════════════════════════════════
+
+def _import_fixture_videos(client, tid):
+    """向任务导入 2 段 fixture 视频（无音轨），返回导入响应。"""
+    with open(_FIXTURE_VIDEO, "rb") as f:
+        content = f.read()
+    return client.post(
+        f"/api/tasks/{tid}/artifacts/import",
+        data={"kind": "video"},
+        files=[
+            ("files", ("scene_1.mp4", content, "video/mp4")),
+            ("files", ("scene_2.mp4", content, "video/mp4")),
+        ],
+    )
+
+
+def test_approve_videos_without_import_is_rejected(client):
+    """未导入任何场景视频 → 确认 videos 检查点必须 422（不再直接放行）。"""
+    tid = _seed_creative_task(task_id="approve00001", audio_source="project")
+    resp = client.post(
+        f"/api/tasks/{tid}/checkpoints/videos/approve", data={"confirmed": "true"},
+    )
+    assert resp.status_code == 422, resp.text
+    assert "1, 2" in resp.json()["detail"]
+
+
+@pytest.mark.skipif(not _ffmpeg_available(), reason="ffmpeg 不可用")
+def test_approve_videos_after_import_passes(client, monkeypatch):
+    """导入全部场景视频后 → 确认 videos 检查点放行（触发 resume）。"""
+    tid = _seed_creative_task(task_id="approve00002", audio_source="project")
+    imp = _import_fixture_videos(client, tid)
+    assert imp.status_code == 200 and imp.json()["imported"] == 2
+
+    import web.routes.task_routes as task_routes
+
+    async def _fake_resume(task_id):
+        return {"ok": True, "resumed": True, "task_id": task_id}
+
+    monkeypatch.setattr(task_routes, "resume_task", _fake_resume)
+    resp = client.post(
+        f"/api/tasks/{tid}/checkpoints/videos/approve", data={"confirmed": "true"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ok"] is True
+
+
+@pytest.mark.skipif(not _ffmpeg_available(), reason="ffmpeg 不可用")
+def test_approve_videos_requires_audio_track(client, monkeypatch):
+    """音频来源=视频时，已导入但无音轨 → 422（音轨校验）。"""
+    tid = _seed_creative_task(task_id="approve00003", audio_source="video")
+    imp = _import_fixture_videos(client, tid)
+    assert imp.status_code == 200 and imp.json()["imported"] == 2
+
+    resp = client.post(
+        f"/api/tasks/{tid}/checkpoints/videos/approve", data={"confirmed": "true"},
+    )
+    assert resp.status_code == 422, resp.text
+    assert "1, 2" in resp.json()["detail"]
+
+    # 音轨探测命中（替身）→ 放行
+    import web.routes.task_routes as task_routes
+
+    monkeypatch.setattr(video_routes, "probe_media", lambda _p: {"has_audio": True})
+
+    async def _fake_resume(task_id):
+        return {"ok": True, "resumed": True, "task_id": task_id}
+
+    monkeypatch.setattr(task_routes, "resume_task", _fake_resume)
+    resp2 = client.post(
+        f"/api/tasks/{tid}/checkpoints/videos/approve", data={"confirmed": "true"},
+    )
+    assert resp2.status_code == 200, resp2.text
+
+
+# ═══════════════════════════════════════════════
+# keep-audio：本项目不产出音频（v7.6 缺陷 2）
+# ═══════════════════════════════════════════════
+
+@pytest.mark.asyncio
+async def test_keep_audio_audio_step_produces_no_project_audio(tmp_path, monkeypatch):
+    """保留视频自带音轨时，跑完音频步骤不得生成 combined_narration.mp3，也不调 EdgeTTS。"""
+    pipeline = _build_creative_pipeline(tmp_path, monkeypatch, "external")
+    pipeline._state.narrations = ["旁白文本"]
+
+    from core.audio import tts as tts_mod
+
+    async def _boom(*_a, **_k):
+        raise AssertionError("EdgeTTS must not be called in keep-audio mode")
+
+    monkeypatch.setattr(tts_mod.EdgeTTSEngine, "generate", _boom)
+    monkeypatch.setattr(tts_mod.EdgeTTSEngine, "harvest_cues", _boom)
+
+    await pipeline._step_audio()
+
+    mp3 = os.path.join(pipeline.working_dir, "combined_narration.mp3")
+    assert not os.path.exists(mp3)
+    # 旁白纯文本导出仍保留（合成层走 keep-audio，字幕按真实时长）
+    assert os.path.exists(os.path.join(pipeline.working_dir, "combined_narration.txt"))
+
+
+# ═══════════════════════════════════════════════
+# 字幕来源：dialogue 取 scenes[].dialogue（v7.6 缺陷 3）
+# ═══════════════════════════════════════════════
+
+def test_use_dialogue_subtitles_flag():
+    from core.pipelines import BasePipeline
+
+    s = _creative_state()
+    s.manual_config.subtitle_source = "dialogue"
+    assert BasePipeline._use_dialogue_subtitles(_P(s)) is True
+    s.manual_config.subtitle_source = "narration"
+    assert BasePipeline._use_dialogue_subtitles(_P(s)) is False
+
+
+@pytest.mark.asyncio
+async def test_creative_dialogue_subtitle_uses_scene_dialogue(tmp_path, monkeypatch):
+    """对白字幕来源：creative 字幕文本取自各场景 dialogue，空则回退旁白。"""
+    pipeline = _build_creative_pipeline(tmp_path, monkeypatch, "external")
+    pipeline._state.manual_config.subtitle_source = "dialogue"
+    pipeline._state.scenes = [
+        SceneTask(index=0, narration_text="旁白0", dialogue="对白0", duration=5),
+        SceneTask(index=1, narration_text="旁白1", dialogue="", duration=5),
+    ]
+
+    captured: dict = {}
+
+    async def _fake_common(**kwargs):
+        captured.update(kwargs)
+        return "", ""
+
+    monkeypatch.setattr(pipeline, "generate_subtitles_common", _fake_common)
+    await pipeline._step_subtitle(None)
+
+    # 场景 0 有对白 → 用对白；场景 1 对白为空 → 回退旁白
+    assert captured["segment_texts"] == ["对白0", "旁白1"]
+

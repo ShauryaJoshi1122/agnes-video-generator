@@ -464,11 +464,21 @@ class MultiScenePipeline(BasePipeline):
         )
 
     def _get_segment_texts_and_durations(self) -> tuple:
-        """字幕分段文本与时长。默认取各场景 narration_text + duration。"""
-        texts = [s.narration_text for s in self._state.scenes if s.narration_text] \
-            or [""]
-        durs = [float(s.duration) for s in self._state.scenes if s.narration_text] \
-            or [5.0]
+        """字幕分段文本与时长。默认取各场景 narration_text + duration。
+
+        v7.6 外部素材模式 · 对白字幕来源（``subtitle_source == "dialogue"``）时
+        改取各场景 ``dialogue``（空则回退该场景旁白）；无对白来源时即回退旁白。
+        """
+        use_dialogue = self._use_dialogue_subtitles()
+
+        def _text_of(scene) -> str:
+            if use_dialogue:
+                return getattr(scene, "dialogue", "") or scene.narration_text
+            return scene.narration_text
+
+        pairs = [(s, _text_of(s)) for s in self._state.scenes]
+        texts = [t for _s, t in pairs if t] or [""]
+        durs = [float(s.duration) for s, t in pairs if t] or [5.0]
         return texts, durs
 
     def _get_audio_path(self) -> str:

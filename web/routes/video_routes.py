@@ -486,13 +486,31 @@ def build_external_video_prompts(state, working_dir: str) -> str:
     texts = [t for t in texts if t]
     if not texts:
         return ""
+    # v7.6 外部素材模式 · 对白字幕来源：各场景台词附在提示词末尾，
+    # 便于用户在外部工具生成视频时同步产出画面内对白。
+    dialogues: list = []
+    mc = getattr(state, "manual_config", None)
+    if (
+        mc
+        and getattr(mc, "execution_mode", "auto") == "external"
+        and getattr(mc, "subtitle_source", "narration") == "dialogue"
+    ):
+        dialogues = [
+            getattr(s, "dialogue", "") or ""
+            for s in (getattr(state, "scenes", None) or [])
+        ]
+
     durations = getattr(state, "scene_durations", None) or []
     total = len(texts)
     blocks = []
     for i, txt in enumerate(texts):
         dur = durations[i] if i < len(durations) else ""
         header = f"【场景 {i + 1}/{total}" + (f" · {dur}s" if dur else "") + "】"
-        blocks.append(f"{header}\n{txt}")
+        block = f"{header}\n{txt}"
+        dlg = dialogues[i] if i < len(dialogues) else ""
+        if dlg:
+            block += f"\n台词（对白）：{dlg}"
+        blocks.append(block)
     return "\n\n".join(blocks)
 
 
@@ -770,6 +788,74 @@ async def probe_task_artifact(task_id: str, relpath: str):
     return {"ok": True, "relpath": relpath, **info}
 
 
+def _validate_external_videos(state) -> None:
+    """外部素材模式确认 ``videos`` 检查点前的磁盘校验（v7.6）。
+
+    逐个场景按 :func:`_resolve_scene_target` 算出期望视频的相对路径，校验文件
+    已导入；``audio_source == "video"``（保留视频自带音轨）时还需各视频含音轨。
+    任一缺失即抛 ``HTTPException(422)``，避免「未导入却被放行」。
+
+    Args:
+        state: 任务状态（含 ``manual_config`` / ``scene_count`` / ``scenes``）。
+
+    Raises:
+        HTTPException: 有场景视频缺失（422）或缺音轨（422）。
+    """
+    mc = getattr(state, "manual_config", None)
+    if not mc or getattr(mc, "execution_mode", "auto") != "external":
+        return
+
+    scene_count = int(getattr(state, "scene_count", 0) or 0) or len(
+        getattr(state, "scenes", None) or []
+    )
+    if scene_count <= 0:
+        return
+
+    task_type = getattr(getattr(state, "task_type", None), "value", "") or str(
+        getattr(state, "task_type", "")
+    )
+    tm = TaskManager(state.task_id, dir_name=helpers.find_dir_name(state.task_id))
+
+    relpaths: list[str] = []
+    seen: set[str] = set()
+    for i in range(scene_count):
+        rel = _resolve_scene_target(task_type, "video", {}, "", i)
+        if rel not in seen:
+            seen.add(rel)
+            relpaths.append(rel)
+
+    missing = [
+        i + 1 for i, rel in enumerate(relpaths)
+        if not os.path.isfile(os.path.join(tm.task_dir, rel))
+    ]
+    ui_lang = getattr(state, "ui_language", "") or None
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=translate(
+                "checkpoint.approve.missing_videos",
+                ui_lang,
+                scenes=", ".join(str(n) for n in missing),
+            ),
+        )
+
+    if getattr(mc, "audio_source", "project") == "video":
+        no_audio = [
+            i + 1 for i, rel in enumerate(relpaths)
+            if os.path.isfile(os.path.join(tm.task_dir, rel))
+            and not probe_media(os.path.join(tm.task_dir, rel)).get("has_audio")
+        ]
+        if no_audio:
+            raise HTTPException(
+                status_code=422,
+                detail=translate(
+                    "checkpoint.approve.missing_audio",
+                    ui_lang,
+                    scenes=", ".join(str(n) for n in no_audio),
+                ),
+            )
+
+
 @router.post("/api/tasks/{task_id}/checkpoints/{checkpoint}/approve")
 async def approve_checkpoint(task_id: str, checkpoint: str,
                              modified_artifact_ids: str = Form(""),
@@ -801,6 +887,10 @@ async def approve_checkpoint(task_id: str, checkpoint: str,
         return {"ok": True, "checkpoint": checkpoint, "confirmed": False, **plan.to_dict()}
 
     # ── 确认落盘 ──
+    # v7.6 外部素材模式：确认 videos 检查点前先校验素材已导入（缺失/无音轨 → 422）
+    if checkpoint == "videos":
+        _validate_external_videos(state)
+
     # 1. 删除受影响产物文件 + 应用级联计划到 state
     deleted_files: list[str] = []
     real_task_dir = os.path.realpath(tm.task_dir)

@@ -120,6 +120,8 @@ class ManualConfig(BaseModel):
     execution_mode: str = "auto"          # auto | manual | external（external 时 enabled=True）
     provider: str = ""                    # 外部工具 id（external 模式；首期仅 "jimeng"）
     audio_source: str = "project"         # project（本项目 TTS）| video（保留视频自带音轨）
+    # v7.6 外部素材模式 · 字幕来源：narration（旁白，同现有逻辑）| dialogue（人物对白）
+    subtitle_source: str = "narration"    # 仅 external 模式有意义；其余忽略
 
     @property
     def is_manual(self) -> bool:
@@ -160,6 +162,9 @@ class SceneTask(BaseModel):
     video_file: str = ""
     # v2.0 新增
     narration_text: str = ""
+    # v7.6 外部素材模式 · 对白字幕来源：编剧阶段逐场景生成的人物对白
+    # （仅 external + subtitle_source == "dialogue" 时填充；为空则字幕回退旁白）
+    dialogue: str = ""
     narration_audio: str = ""
     subtitle_srt: str = ""
     final_clip: str = ""

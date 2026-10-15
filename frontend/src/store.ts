@@ -45,6 +45,8 @@ export const appState = reactive({
   providerSelected: '' as string,
   // v7.6 外部素材模式：音频来源（video=用视频自带音频 / project=本项目配音）
   externalAudioSource: 'video' as 'video' | 'project',
+  // v7.6 外部素材模式：字幕来源（narration=旁白 / dialogue=人物对白）
+  externalSubtitleSource: 'narration' as 'narration' | 'dialogue',
 })
 
 // 折叠偏好

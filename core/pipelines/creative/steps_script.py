@@ -451,6 +451,21 @@ class ScriptStepsMixin:
                 if i < len(durations):
                     scene_obj.duration = durations[i]
 
+        # v7.6 外部素材模式 · 对白字幕来源：为每个场景生成人物对白，落 scenes[].dialogue
+        if self._use_dialogue_subtitles():
+            dialogues = await asyncio.to_thread(
+                self.screenwriter.write_dialogues, story, scenes,
+                self._style_with_language_directive(),
+            )
+            for i, scene_obj in enumerate(self._state.scenes):
+                if i < len(dialogues):
+                    scene_obj.dialogue = dialogues[i]
+            logger.info(
+                "[Pipeline] Dialogue subtitles: %d/%d scenes have dialogue",
+                sum(1 for s in self._state.scenes if s.dialogue),
+                len(self._state.scenes),
+            )
+
         self._state.scene_durations = durations
         logger.info(
             f"[Pipeline] Script: {len(scenes)} scenes, "

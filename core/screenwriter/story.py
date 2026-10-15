@@ -429,6 +429,94 @@ language that focuses on what the camera sees and how it feels.
         logger.info(f"[Screenwriter] Script written: {len(scenes)} scenes")
         return scenes
 
+    def write_dialogues(
+        self, story: str, scenes: List[str], style: str = ""
+    ) -> List[str]:
+        """为每个场景生成人物对白（v7.6 外部素材模式 · 对白字幕来源）。
+
+        与 :meth:`write_script` 配套：同一剧组景、逐场景产出「人物口中所说的台词」，
+        供外部素材模式下以对白作为字幕文本来源。语言跟随输入故事。
+
+        Args:
+            story: 完整故事文本。
+            scenes: 各场景视觉描述列表（与 :meth:`write_script` 输出等长）。
+            style: 风格描述（可选）。
+
+        Returns:
+            与 ``scenes`` 等长的对白文本列表；某场景无对白（纯风景）时为空串。
+        """
+        scene_lines = "\n".join(
+            f"场景{i + 1}: {str(s)[:300]}" for i, s in enumerate(scenes)
+        )
+        system_prompt = self._prompt(
+            zh_text="""\
+你是一位专业的影视编剧，擅长撰写人物对白。请为给定的每个场景撰写贴合剧情与画面的人物台词。
+
+[输出格式] 返回一个 JSON 对象：
+{
+  "dialogues": [
+    "场景 1 的对白（可为多句，以换行分隔；无对白则空字符串）",
+    "场景 2 的对白...",
+    ...
+  ]
+}
+
+规则：
+- dialogues 数组长度必须等于场景数量。
+- 对白语言必须与输入故事相同。
+- 只输出人物口中所说的台词，不要旁白、不要镜头/动作/场景描述、不要引号外的解说。
+- 每个场景 1-3 句，简洁自然，契合画面与情绪。
+- 纯风景或无人物出场的场景返回空字符串。
+""",
+            en_text="""\
+You are a professional screenwriter skilled at writing character dialogue. \
+Write character lines that fit the story and visuals for each given scene.
+
+[Output Format] Return a JSON object:
+{
+  "dialogues": [
+    "Scene 1 dialogue (may span multiple lines; empty string if none)",
+    "Scene 2 dialogue...",
+    ...
+  ]
+}
+
+Rules:
+- The dialogues array length MUST equal the scene count.
+- Dialogue language MUST match the input story language.
+- Output ONLY spoken lines; no narration, no camera/action/scene description, \
+no editorializing outside quotes.
+- 1-3 lines per scene, concise and natural, fitting the visuals and mood.
+- Return an empty string for pure-landscape scenes with no characters.
+""",
+        )
+        user_prompt = f"""\
+<story>
+{story}
+</story>
+
+<scenes>
+{scene_lines}
+</scenes>
+
+<style>
+{style}
+</style>
+"""
+        logger.info("[Screenwriter] Writing dialogue for %d scenes...", len(scenes))
+        result = self._chat_json(system_prompt, user_prompt)
+        dialogues = result.get("dialogues", [])
+        if not isinstance(dialogues, list):
+            dialogues = []
+        dialogues = [str(d).strip() for d in dialogues]
+        # 长度对齐到场景数（截断多余 / 补空）
+        if len(dialogues) < len(scenes):
+            dialogues += [""] * (len(scenes) - len(dialogues))
+        elif len(dialogues) > len(scenes):
+            dialogues = dialogues[: len(scenes)]
+        logger.info("[Screenwriter] Dialogue written: %d scenes", len(dialogues))
+        return dialogues
+
     def generate_narration_for_video(
         self, story: str, scenes: List[str], total_duration: float, style: str = ""
     ) -> str:

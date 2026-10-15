@@ -790,6 +790,10 @@ CATALOG: Dict[str, Dict[str, str]] = {
         "zh": "audio_source 必须为 project 或 video",
         "en": "audio_source must be either project or video",
     },
+    "validation.subtitle_source_invalid": {
+        "zh": "subtitle_source 必须为 narration 或 dialogue",
+        "en": "subtitle_source must be either narration or dialogue",
+    },
     "validation.import_kind_invalid": {
         "zh": "kind 必须为 image 或 video",
         "en": "kind must be either image or video",
@@ -973,6 +977,14 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "checkpoint.json_required": {
         "zh": "modified_artifact_ids / param_updates 必须为 JSON",
         "en": "modified_artifact_ids / param_updates must be valid JSON",
+    },
+    "checkpoint.approve.missing_videos": {
+        "zh": "尚未导入以下场景视频，无法确认：第 {scenes} 场景",
+        "en": "Scene video(s) not yet imported, cannot approve: scene(s) {scenes}",
+    },
+    "checkpoint.approve.missing_audio": {
+        "zh": "以下场景视频缺少音轨（音频来源=视频），无法确认：第 {scenes} 场景",
+        "en": "Scene video(s) have no audio track (audio source = video), cannot approve: scene(s) {scenes}",
     },
     "gallery.task_not_found": {
         "zh": "任务不存在",

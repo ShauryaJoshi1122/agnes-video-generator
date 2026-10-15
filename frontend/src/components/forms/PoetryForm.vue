@@ -138,6 +138,7 @@ async function submitPoetry() {
       if (appState.execMode === 'external') {
         fd.append('provider', appState.providerSelected || 'jimeng')
         fd.append('audio_source', appState.externalAudioSource)
+        fd.append('subtitle_source', appState.externalSubtitleSource)
       }
 
       ev = {
