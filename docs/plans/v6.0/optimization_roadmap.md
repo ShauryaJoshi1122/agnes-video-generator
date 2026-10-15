@@ -6,7 +6,8 @@
 >
 > **来源**：2026-08-26 全项目架构评审（后端并发/可靠性/性能/可维护性/测试 + 前端/i18n/构建/部署基础设施），结合旧路线图完成状态核对与调研存档评定汇总而成。2026-08-28 二次 review 修订：修正 0.5 误判、补齐 0.6/1.1/1.4 方案缺口、纳入新发现的 3 个高优先级缺陷（0.7~0.9），并将前端新增问题并入 1.7/3.1/3.4。
 >
-> **版本计划**：全部 **29 项**计划在 **v6 版本线内完成**（当前 v6.2.1；批次 0~3 随后续版本分批落地、分批发版）。
+> **版本计划**：全部 **32 项**计划在 **v6 版本线内完成**（当前 v6.2.1；批次 0~3 随后续版本分批落地、分批发版）。
+> **修订（2026-10-15）**：原写「29 项」，按表内实际行数更正为 **32**（批次 0＝12 + 批次 1＝8 + 批次 2＝5 + 批次 3＝7），与文末状态行原已记的「32 项」对齐。
 >
 > **优先级标记**：🔴 高（建议优先）| 🟡 中 | 🟢 低（锦上添花）
 > **批次语义**：批次 0 为即修缺陷（均为小改动，可随发现随修）；批次 1~3 按序推进，批内 🔴 优先。
@@ -17,10 +18,11 @@
 
 | 批次 | 主题 | 条目数 |
 |------|------|--------|
-| 0 | 即修缺陷（小成本高收益） | 9 |
+| 0 | 即修缺陷（小成本高收益） | 12 |
 | 1 | 可靠性与工程基础 | 8 |
 | 2 | 性能 | 5 |
 | 3 | 体验与长期健康度 | 7 |
+（修订 2026-10-15：批次 0 原写 9，按表内实际行数 0.1–0.12 共 12 项更正。）
 
 | # | 优化点 | 优先级 | 一句话价值 | 工作量 | 状态 |
 |---|--------|--------|-----------|--------|------|
@@ -35,7 +37,7 @@
 | 0.9 | 图片生成无重复提交守卫 | 🔴 | 快速连点不再并发重复提交扣费 | 小 | ✅ |
 | 0.10 | chat 超时与重试预算联合加固 | 🔴 | 长 prompt 成功窗口 120s→300s，失败等待不翻倍 | 小 | ✅ |
 | 0.11 | 稿件场景 prompt 单段失败隔离 | 🔴 | 单段失败不再累及整任务，可续传重试 | 中 | ✅ |
-| 0.12 | Windows 启动脚本与 start.sh 对齐 | 🟡 | Windows 回退 `py` 启动器 + 就绪后开浏览器 | 小 | ✅ |
+| 0.12 | Windows 启动脚本与 start.sh 对齐 | 🟡 | Windows 回退 `py` 启动器 + 就绪后开浏览器 | 小 | ✅（实现完成；**Windows 平台验证待补**，见正文 0.12 / PRD §5.4） |
 | 1.1 | 任务状态单写者原则 | 🔴 | 停止/删除后磁盘状态不再回跳 | 中 | ✅ |
 | 1.2 | 断点续传补全（cues 持久化等） | 🟡 | 长任务续传不再重采 TTS | 中 | ✅ |
 | 1.3 | 并发等待 + 自适应轮询 | 🟡 | 多场景等待时延从线性叠加降为并行 | 中 | ✅ |
@@ -484,7 +486,10 @@
 | 2026-08-30 | 3.5 落地（pydantic-settings 完整版） | `core/config.py`（`RuntimeSettings(BaseSettings)`：host/port/限速×4/i2i 模型/prompt_language/字幕 ASS/轮询超时/log_file/sweep/hmac_key/regression 工作目录，env_file=.env，无缓存每次动态读取保证测试可覆盖）；`requirements.txt`（+`pydantic-settings`）；收敛调用点：`rate_limiter.py`×4、`app_state.py`、`agnes_image.py`、`agnes_video.py`（轮询超时参数化）、`screenwriter`、`server.py`（host/port/log/sweep）、`config_routes.py`、`config.py`；`audio_overlay.py` 经 `subtitle_ass_enabled()` 联动 | 新增 6 项 `test_config_settings.py` 用例通过；`test_core`/`test_rate_limiter_async`/`test_subtitle_ass`/`test_scenes_single_pass` 全通过；无 pydantic-settings 时降级读 os.environ 兜底 |
 | 2026-08-30 | R3 落地（PR #32 阿语后续：多语言补齐） | A 节 `core/audio/voices.py`（`_ARABIC_RE` 排除 U+FEFF）；B 节 `core/audio/voices.py`（新增 8 语言 PROJECT_LANGUAGES/LANG_COMPAT/VOICE_PREVIEW_TEXTS/脚本检测正则/`_VOICE_NATIVE_NAMES`/`fil`→`tl` 归一，共 22 语言）、`core/config.py`（`DEFAULT_THAI_FONT`/`DEFAULT_DEVANAGARI_FONT`/`DEFAULT_BENGALI_FONT`）、`core/compositor/concatenator/{concat,audio_overlay}.py`（逐条脚本字体回退 + ASS `\fn`）、`resource/fonts/`（新增 3 个 Noto 字体）；fa/ur 复用 NotoNaskhArabicUI + reshape+bidi 管线 | 新增 `tests/test_voice_multilang.py` 32 项通过；全量单测（不含 mock_regression）459 项 + mock_regression 28 项通过；`ruff` 零告警；`i18n_check` 通过；目录含 22 语言分组（ar/tr/vi/th/tl/hi/fa/bn/ur 试听用本地姓名） |
 | 2026-09-22 | stability_hardening 三项（0.10/0.11/0.12）落地 | 0.10 `core/config.py`（`agnes_chat_timeout`）+`core/api/agnes_chat.py`（`_request_with_retry` 透传 + `chat()` 读配置、`timeout_retry_limit=1`）+`core/api/rate_limiter.py`（`request_with_key_rotation` 新增 `timeout_retry_limit` 参数，超时/连接错误独立退避上限，默认 None 行为不变）；0.11 `core/pipelines/manuscript_video.py`（`_generate_scene_prompts` 改 `return_exceptions=True` + 控制流异常与业务失败分类 + 部分/全段失败语义 + 返回值归一化）；0.12 `start.bat`（`PY_CMD`/`PY_ARGS` 探测 `py` 回退 + PowerShell 就绪轮询开浏览器） | 新增 `tests/test_api_aux.py` 3 项（timeout_retry_limit 1/0/默认）+`tests/test_manuscript_scene_prompt_isolation.py` 5 项通过；全量单测通过；`ruff` 零告警；`py_compile` 全通过；`regression_test_plan.md` 新增 M5 场景（15 场景）；0.12 平台验证待补（PRD §5.4 要求 Windows 实测） |
+| 2026-10-15 | A 类「真未修复」修复批次（记录修订 A3/A4/A6/A7） | `web/routes/task_creation_routes.py`（`_save_upload_file`：非白名单后缀拒绝不再静默改 `.png` + 上传即 PIL 校验字节可解码 + 自定义尾帧按 `end_frame_indices_json` 场景索引落盘保留占位）、`core/pipelines/creative/steps_frames.py`（坏尾帧改含场景序号的可读本地化报错，不再抛 PIL 原始栈锁死整任务）、`core/screenwriter/scenes.py`（诗词风格缺省回退改语言中性英文 `cinematic realistic style`）、`core/config.py`（`CONFIG_DIR` 支持 `AGNES_CONFIG_DIR` 覆盖，修 npx 丢配置）、`core/api/agnes_chat.py`（`chat()` 空响应守卫 + 重试一次，不再裸取 `choices[0]`）、`core/i18n_backend.py`（新增 4 条上传/尾帧校验 zh/en 文案）、`frontend/src/components/forms/CreativeForm.vue`（尾帧上传附场景索引映射，修空文件致图场景错位） | `py_compile` 全通过；`scripts/i18n_check.py` 退出 0；`cd frontend && npm run build` 通过；`pytest tests/test_screenwriter.py tests/test_core.py` 98 passed。**A5（20 语言 fbRep* 真翻译）另批**；**A1（默认视频模型切 2.5-flash）/A2（`model_not_found` 结构化异常）待用户决策后实施** |
 
 ---
 
-*文档版本：v1.4（2026-09-22）| 创建日期：2026-08-26 | 目标版本：v6 版本线内全部完成 | 状态：**32 项全部完成**（批次 0 全 12、批次 1 全 8、批次 2 全 6（2.1a/2.1b/2.1c/2.2/2.3/2.4/2.5）、批次 3 全 7）*
+*文档版本：v1.5（2026-10-15）| 创建日期：2026-08-26 | 目标版本：v6 版本线内全部完成 | 状态：**32 项全部完成**（批次 0 全 12、批次 1 全 8、批次 2 全 5〔2.1 含 a/b/c 三子项 + 2.2/2.3/2.4/2.5〕、批次 3 全 7；其中 0.12 实现完成、Windows 平台验证待补）*
+
+> **修订记录（2026-10-15）**：更正条目计数（29→32、批次 0 由 9→12、批次 2 由「6」更正为行数 5 并说明 2.1 含 3 子项），并给 0.12 补注「平台验证待补」。

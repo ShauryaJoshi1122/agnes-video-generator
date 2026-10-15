@@ -17,7 +17,7 @@ All core AI capabilities are **completely free** — no trial period, no waterma
 |-----------|-------|------|
 | Text / Script Generation | `agnes-3.0-flash` | Free |
 | Image Generation | `agnes-image-2.5-flash` | Free |
-| Video Generation | `agnes-video-v2.0` | Free |
+| Video Generation | `agnes-video-2.5-flash` | Free |
 | Text-to-Speech Narration | Edge TTS (Microsoft) | Free, no extra API key needed |
 
 All AI API calls share a token-bucket rate limiter (shared bucket defaults to 20 × number of keys × 0.8 requests/min, plus a separate bucket for video submissions), with automatic retries and exponential backoff to ensure stable operation.

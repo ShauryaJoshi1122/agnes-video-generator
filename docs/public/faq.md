@@ -58,7 +58,7 @@ As of **v7.0**, the app handles this explicitly:
 - The progress panel names the cause and keeps the raw error visible, e.g. `Agnes 视频队列已满（HTTP 503 · video_queue_full），正在排队重试（第 3 次 / 已等 5 分钟）。建议错峰重试或稍后再试。` / `Agnes video queue is full (HTTP 503 · video_queue_full), retrying (attempt 3 / waited 5 min). Please retry later, ideally off-peak.`
 - Only when those retries are exhausted do you get a failure — and the message names Agnes, quotes the raw `HTTP 503 · video_queue_full`, and tells you to **retry later / off-peak or switch model**, instead of a generic `HTTP 503: server error`.
 
-**What you can do:** retry during off-peak hours, switch to another video model (Video 2.0 uses a separate queue and often still accepts jobs), or add more API keys (each key has its own quota).
+**What you can do:** retry during off-peak hours, or add more API keys (each key has its own quota).
 
 ### Generation timed out after ~15 minutes with "inference not finished after 15 minutes"
 
@@ -77,7 +77,7 @@ Known **upstream defect** (reported 2026-09): with `aspect_ratio=9:16` the API r
 
 Two ways out:
 
-1. **Avoid it (zero risk, default)**: pick `16:9` (or `3:4`), or use **Video 2.0** for portrait output. Since v7.0 the app shows an explicit hint when you select 9:16 on a 2.5-series model.
+1. **Avoid it (zero risk, default)**: pick `16:9` (or `3:4`). Since v7.0 the app shows an explicit hint when you select 9:16 on a 2.5-series model.
 2. **Let the app fix it**: set `AGNES_FIX_V25_PORTRAIT_ROTATION=1` before starting. After download the app detects the signature (landscape inference size in a portrait container) and transposes the clip once (`ffmpeg transpose=2`), logging `[UpstreamRotate]`. This is opt-in because it would over-rotate the day upstream fixes the bug.
 
 ### The online demo offers a model or resolution that my local install doesn't have
@@ -96,7 +96,7 @@ git pull && ./start.sh                                  # source install
 docker compose pull && docker compose up -d             # Docker install
 ```
 
-Quality differences between the demo and your install usually come from **model generation** itself (Video 2.5 Flash runs at roughly 4.1 Mb/s versus ~1.5 Mb/s for Video 2.0), not from a setting you missed. Pick `Video 2.5 Flash` in the model dropdown to match the demo.
+Quality differences between the demo and your install usually come from **model generation** itself rather than a setting you missed. `Video 2.5 Flash` is now the default video model, matching the online demo.
 
 ### Generation worked for a long time, then failed at the last step with `getaddrinfo failed` / `[Errno 11004]`
 

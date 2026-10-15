@@ -1,6 +1,7 @@
 # v6.1「问题反馈」方案（PRD）
 
-> **状态**：✅ 方案已确认（2026-08-25），待实施
+> **状态**：✅ 方案已确认（2026-08-25）；🟢 **实施完成**（P0–P5 全部完成，见 `implementation_plan.md` 状态行；v6.1 已发布）
+> （修订 2026-10-15：原状态行仅写「待实施」，与 `implementation_plan.md` 的「🟢 实施完成」及 `AGENTS.md` 记载矛盾，更正为已实施。）
 > **版本**：v1.0（2026-08）
 > **关联文档**：`AGENTS.md` · `docs/plans/v6.1/implementation_plan.md`（实施路线图）· `docs/dev/release_process.md`（发版规范）· `docs/public/faq.md` / `faq.zh.md`（官网 FAQ 来源）· `docs/dev/regression_test_plan.md`（回归）
 > **定位**：v6.1 中版本更新的**需求与方案文档**，覆盖「任务失败问题反馈模块」全部功能（含二期诊断端点）。实施拆分见 `implementation_plan.md`。

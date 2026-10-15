@@ -18,7 +18,7 @@ agnes-video-generator/
 │   ├── api/
 │   │   ├── agnes_chat.py             # LLM Chat API (agnes-3.0-flash)
 │   │   ├── agnes_image.py            # 图片生成 API (agnes-image-2.5-flash，旧版 2.1 / 2.0-flash 可选)
-│   │   ├── agnes_video.py            # 视频生成 API (agnes-video-v2.0)
+│   │   ├── agnes_video.py            # 视频生成 API (agnes-video-2.5-flash)
 │   │   └── rate_limiter.py           # 双令牌桶限速（共享桶 20 × Key 数 × 0.8 次/分 + 视频提交独立桶）
 │   ├── audio/
 │   │   ├── tts.py                    # Edge TTS 引擎 + 静音降级引擎
@@ -56,7 +56,7 @@ agnes-video-generator/
 | 前端 | Vue 3 + Vite + TypeScript + Tailwind | 源码在 `frontend/`，构建产物提交到 `static/` |
 | LLM | Agnes Chat (`agnes-3.0-flash`) | 免费 — 故事、脚本、旁白生成 |
 | 图片 AI | `agnes-image-2.5-flash` (t2i / i2i) | 免费 — 参考图、尾帧、独立图片生成 |
-| 视频 AI | `agnes-video-v2.0` | 免费 — 文生视频、图生视频、关键帧 |
+| 视频 AI | `agnes-video-2.5-flash` | 免费 — 文生视频、图片参考、关键帧（4–12 秒、720P） |
 | TTS | Edge TTS（微软） | 免费 — 动态音色目录，按 22 种 UI 语言分组，无需额外 API Key |
 | 字幕 | moviepy + srt | 词级细粒度 SRT，多行自动换行 |
 | 视频处理 | moviepy + ffmpeg | 拼接、字幕叠加、音频混合 |
