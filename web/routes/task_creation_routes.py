@@ -1,6 +1,7 @@
 """任务创建路由：simple / creative / manuscript / poetry / anchor + 向后兼容旧端点。"""
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
@@ -9,15 +10,13 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from PIL import Image
 
 from core.async_io import write_bytes
 from core.config import (
-    DURATION_FRAME_MAP,
     VIDEO_25_DURATIONS,
     api_key_missing_msg,
     get_api_key,
-    get_selected_models,
-    is_v25_video_model,
 )
 from core.i18n_backend import get_current_lang, translate
 from core.path_security import safe_join
@@ -146,18 +145,61 @@ def _build_subtitle_config(
     )
 
 
-async def _save_upload_file(upload: UploadFile, upload_dir: str, prefix: str) -> str:
+def _validate_image_bytes(data: bytes) -> bool:
+    """校验字节是否为可解码图片（PIL verify），不可解码时返回 False。"""
+    if not data:
+        return False
+    try:
+        with Image.open(io.BytesIO(data)) as probe:
+            probe.verify()
+        return True
+    except Exception:
+        return False
+
+
+async def _save_upload_file(
+    upload: UploadFile,
+    upload_dir: str,
+    prefix: str,
+    scene_index: Optional[int] = None,
+) -> str:
     """保存上传文件（用 UUID 替代客户端文件名，避免路径穿越），返回落盘路径。
 
-    扩展名取自白名单：客户端 filename 中夹带的任意后缀一律拒绝，
-    再经 ``safe_join`` 锚定到 upload_dir 内，杜绝路径穿越（S2083）。
+    扩展名取自白名单：客户端 filename 中夹带的任意后缀（含无扩展名）一律
+    以可读错误拒绝——不再静默改写为 ``.png``（那会让 HEIC/AVIF/TIFF 变成
+    「后缀撒谎」的伪 PNG）。随后经 ``safe_join`` 锚定到 upload_dir 内，杜绝
+    路径穿越（S2083）。**上传时即校验字节是可解码图片**（issue #88），坏文件
+    按 UI 语言报错并带上场景序号，避免拖到流水线 ``end_frame_gen`` 才抛 PIL
+    原始栈打死整任务。
+
+    Args:
+        upload: 上传文件。
+        upload_dir: 落盘目录。
+        prefix: 文件名前缀（不含扩展名）。
+        scene_index: 该文件对应的场景序号（1 起，可选），用于报错定位。
+
+    Raises:
+        HTTPException: 扩展名不在白名单（400）或字节非可解码图片（400）。
     """
-    ext = (os.path.splitext(upload.filename)[1] or ".png").lower()
+    ext = os.path.splitext(upload.filename or "")[1].lower()
     if ext not in _ALLOWED_UPLOAD_EXTS:
-        ext = ".png"
+        raise HTTPException(
+            status_code=400,
+            detail=translate(
+                "error.upload_ext_invalid", None,
+                ext=ext or "?", options=", ".join(sorted(_ALLOWED_UPLOAD_EXTS)),
+            ),
+        )
+    data = await upload.read()
+    if not _validate_image_bytes(data):
+        key = "error.image_unreadable_scene" if scene_index is not None else "error.image_unreadable"
+        raise HTTPException(
+            status_code=400,
+            detail=translate(key, None, scene_index=scene_index),
+        )
     os.makedirs(upload_dir, exist_ok=True)
     upload_path = safe_join(upload_dir, f"{prefix}{ext}")
-    await write_bytes(upload_path, await upload.read())
+    await write_bytes(upload_path, data)
     return upload_path
 
 
@@ -187,9 +229,8 @@ async def create_simple_task(
             status_code=422,
             detail=translate("validation.mode_invalid", None, options=_VALID_MODES, current=mode),
         )
-    # v6.2：2.5 系列模型时长档位为 4–12 秒；v2.0 仍用 DURATION_FRAME_MAP 档位
-    video_model = get_selected_models().get("video") or ""
-    valid_durations = VIDEO_25_DURATIONS if is_v25_video_model(video_model) else list(DURATION_FRAME_MAP.keys())
+    # v6.2：2.5 系列（当前唯一在线的视频模型）时长档位为 4–12 秒
+    valid_durations = VIDEO_25_DURATIONS
     if duration not in valid_durations:
         raise HTTPException(
             status_code=422,
@@ -267,6 +308,7 @@ async def create_creative_task(
     reference_image: UploadFile = File(None),
     end_frame_images: List[UploadFile] = File(None),
     scene_reference_images: List[UploadFile] = File(None),
+    end_frame_indices_json: str = Form("[]"),
     use_custom_end_frames: bool = Form(False),
     generate_end_frames_from_ref: bool = Form(True),
     # v2.0 音频配置
@@ -372,14 +414,32 @@ async def create_creative_task(
         state.reference_image = await _save_upload_file(reference_image, upload_dir, f"{task_id}_ref")
 
     # P3: 处理自定义尾帧图片上传
+    # 前端只上送非空槽位，并附带「文件 → 场景 index」映射（end_frame_indices_json）；
+    # 此处按映射落盘并**保留空串占位**，维持「图片 ↔ 场景」索引对应（此前仅按上送顺序
+    # 落盘，前面的空槽位会让后续文件整体前移、图场景错位，issue #88）。
     if use_custom_end_frames and end_frame_images:
-        saved_paths = []
-        for idx, ef_file in enumerate(end_frame_images):
-            if ef_file and ef_file.filename:
-                saved_paths.append(await _save_upload_file(ef_file, upload_dir, f"{task_id}_end_{idx}"))
-        if saved_paths:
+        try:
+            ef_indices = json.loads(end_frame_indices_json) if end_frame_indices_json else []
+            if not isinstance(ef_indices, list) or not all(isinstance(i, int) for i in ef_indices):
+                raise ValueError("not a list[int]")
+        except Exception:
+            raise HTTPException(
+                status_code=422,
+                detail=translate("validation.end_frame_indices_not_list", None),
+            )
+        slots = max(ef_indices) + 1 if ef_indices else len(end_frame_images)
+        saved_paths = [""] * max(slots, 0)
+        for pos, ef_file in enumerate(end_frame_images):
+            scene_idx = ef_indices[pos] if pos < len(ef_indices) else pos
+            if scene_idx < 0 or not (ef_file and ef_file.filename):
+                continue
+            saved_paths[scene_idx] = await _save_upload_file(
+                ef_file, upload_dir, f"{task_id}_end_{scene_idx}", scene_index=scene_idx + 1,
+            )
+        if any(saved_paths):
             state.end_frame_images = saved_paths
-            logger.info(f"[Pipeline] Saved {len(saved_paths)} custom end frame images for task {task_id}")
+            saved_count = sum(1 for p in saved_paths if p)
+            logger.info(f"[Pipeline] Saved {saved_count} custom end frame images for task {task_id}")
 
     # v5.0 优化 5：用户上传分镜场景图（按场景顺序落盘，场景数不匹配时按场景 index 对齐）
     if scene_reference_images:
@@ -762,6 +822,7 @@ async def create_task_legacy(
     video_height: int = Form(1152),
     reference_image: UploadFile = File(None),
     end_frame_images: List[UploadFile] = File(None),
+    end_frame_indices_json: str = Form("[]"),
     use_custom_end_frames: bool = Form(False),
     generate_end_frames_from_ref: bool = Form(True),
 ):
@@ -775,6 +836,7 @@ async def create_task_legacy(
         video_height=video_height,
         reference_image=reference_image,
         end_frame_images=end_frame_images,
+        end_frame_indices_json=end_frame_indices_json,
         scene_reference_images=[],
         use_custom_end_frames=use_custom_end_frames,
         generate_end_frames_from_ref=generate_end_frames_from_ref,

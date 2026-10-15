@@ -8,6 +8,7 @@ v2.5 视频模型时长档位分支。写路径全部隔离到 tmp_path，不触
     .venv/bin/python -m pytest tests/test_task_creation_extra.py -q
 """
 
+import io
 import sys
 import os
 
@@ -16,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from web.routes import task_creation_routes
 from web import helpers
@@ -62,7 +64,14 @@ def env(monkeypatch, tmp_path):
     return {"uploads": up, "launched": launched}
 
 
-_PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+def _real_png_bytes() -> bytes:
+    """生成一张真实可解码的最小 PNG（A3 上传校验会做 PIL 解码验证）。"""
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), (255, 0, 0)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+_PNG = _real_png_bytes()
 
 
 def _file(name, content=_PNG):
@@ -96,20 +105,21 @@ class TestSimpleRich:
         resp = client.post("/api/tasks/simple", data={"prompt": "k", "mode": "ti2vid", "duration": "5"})
         assert resp.status_code == 200
 
-    def test_v25_video_model_duration(self, client, env, monkeypatch):
-        """v2.5 视频模型走 VIDEO_25_DURATIONS（4-12 秒）档位。"""
-        monkeypatch.setattr(task_creation_routes, "is_v25_video_model", lambda m: True)
-        monkeypatch.setattr(task_creation_routes, "get_selected_models", lambda: {"video": "agnes-video-v2.5"})
-        resp = client.post("/api/tasks/simple", data={"prompt": "k", "mode": "t2v", "duration": "8"})
-        assert resp.status_code == 200
+    def test_v25_video_model_duration(self, client, env):
+        """2.5 系列（当前唯一在线模型）时长档位为 4–12 秒。"""
+        ok = client.post("/api/tasks/simple", data={"prompt": "k", "mode": "t2v", "duration": "8"})
+        assert ok.status_code == 200
+        bad = client.post("/api/tasks/simple", data={"prompt": "k", "mode": "t2v", "duration": "15"})
+        assert bad.status_code == 422
 
-    def test_unknown_extension_upload_falls_back_png(self, client, env):
+    def test_unknown_extension_rejected_400(self, client, env):
+        """非白名单扩展名（如 .svg）硬拒绝（不再静默改写为 .png，见 issue #88）。"""
         resp = client.post(
             "/api/tasks/simple",
             data={"prompt": "t", "mode": "t2v", "duration": "5"},
             files=[("reference_image", _file("weird.svg"))],
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 400
 
 
 # ═══════════════════════════════════════════════
