@@ -120,6 +120,11 @@ def _build_manual_config(execution_mode: str, pause_points: str,
    使其完成后能在 `scenes` / `references` 暂停供导入产物（manual 模式行为不变）。
 6. **前端外部模式尾帧选项**：`CreativeForm.vue` 中 `genEndFromRef` 默认 `false`；
    切换/进入 external 时取消并禁用两个尾帧复选框。
+7. **外部模式分镜提示词语言与输入原文一致**：`build_input_language_directive` 新增
+   `external` 参数（默认 `False` 保持既有行为）。非外部模式对非中文输入仍保留
+   「场景视觉提示词用英文」约定；外部模式改为要求分镜提示词**与输入原文语言一致**
+   （不翻译成英文），使交给外部工具（即梦）的分镜语言与用户输入原文一致。
+   creative `_style_with_language_directive()` 按 `_is_external()` 传入该开关。
 
 ### 4.2 keep-audio 接线收口（P0/P2 实际落点）
 

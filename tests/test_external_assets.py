@@ -258,6 +258,35 @@ def test_external_mode_exposes_coarse_checkpoints(tmp_path, monkeypatch):
     assert "step_reference_images" not in manual_steps
 
 
+def test_external_mode_scene_prompt_language_follows_input():
+    """外部模式：分镜提示词语言跟随输入原文，不再强制英文。"""
+    from core.screenwriter import build_input_language_directive
+
+    arabic = "رحلة قصيرة في الصحراء"
+    # 默认（非外部）：分镜视觉提示词仍强制英文
+    assert "still write in English" in build_input_language_directive(arabic)
+    # 外部素材模式：分镜提示词跟随输入原文语言
+    d = build_input_language_directive(arabic, external=True)
+    assert "Arabic" in d
+    assert "still write in English" not in d
+    assert "SAME language as the input idea" in d
+
+
+def test_creative_external_style_directive(tmp_path, monkeypatch):
+    """creative：外部模式下 style 指令不再要求分镜英文；manual 模式不变。"""
+    external = _build_creative_pipeline(tmp_path, monkeypatch, "external")
+    external._state.idea = "رحلة قصيرة في الصحراء"
+    external._state.style = "cinematic"
+    combined = external._style_with_language_directive()
+    assert "still write in English" not in combined
+    assert combined.endswith("cinematic")
+
+    manual = _build_creative_pipeline(tmp_path, monkeypatch, "manual")
+    manual._state.idea = "رحلة قصيرة في الصحراء"
+    manual._state.style = "cinematic"
+    assert "still write in English" in manual._style_with_language_directive()
+
+
 # ═══════════════════════════════════════════════
 # 导入 / 探针端点（端到端）
 # ═══════════════════════════════════════════════

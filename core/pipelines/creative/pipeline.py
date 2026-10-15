@@ -92,12 +92,18 @@ class CreativeVideoPipeline(
         """用户 style 前置基于 idea 文字体系的显式语言指令。
 
         idea 为非中文脚本时返回「指令 + style」，中文 idea 原样返回 style
-        （指令为空串）。指令确保故事/旁白跟随输入语言，同时保留"场景视觉提示词
-        用英文"的既有约定。
+        （指令为空串）。默认指令确保故事/旁白跟随输入语言，同时保留"场景视觉
+        提示词用英文"的既有约定。
+
+        v7.6 外部素材模式：分镜视觉提示词直接交给外部工具（即梦）生成，不做
+        英文转换——分镜语言与用户输入原文语言保持一致（``external=True``）。
         """
         from core.screenwriter import build_input_language_directive
 
-        return build_input_language_directive(self._state.idea) + self._state.style
+        return (
+            build_input_language_directive(self._state.idea, external=self._is_external())
+            + self._state.style
+        )
 
     # ------------------------------------------------------------------
     # Properties
