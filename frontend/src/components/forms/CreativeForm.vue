@@ -168,9 +168,13 @@ async function submitCreative() {
       const sc = subtitleRef.value
       collectAudioSubtitleFields(fd, sc, voiceSelections, 'c', currentLang.value)
 
-      // v6.0 手动模式：执行模式 + 暂停点
+      // v6.0 手动模式 / v7.6 外部素材模式：执行模式 + 暂停点 + 工具与音频来源
       fd.append('execution_mode', appState.execMode)
-      fd.append('pause_points', JSON.stringify(appState.execMode === 'manual' ? appState.pausePoints : []))
+      fd.append('pause_points', JSON.stringify(appState.execMode !== 'auto' ? appState.pausePoints : []))
+      if (appState.execMode === 'external') {
+        fd.append('provider', appState.providerSelected || 'jimeng')
+        fd.append('audio_source', appState.externalAudioSource)
+      }
 
       ev = {
         style: form.style,
@@ -346,7 +350,7 @@ async function submitCreative() {
     </div>
 
     <!-- Audio & Subtitle -->
-    <SubtitleConfig ref="subtitleRef" task="c" :with-style="true" />
+    <SubtitleConfig ref="subtitleRef" task="c" :with-style="true" :external="appState.execMode === 'external'" />
 
     <WatermarkToggle />
 

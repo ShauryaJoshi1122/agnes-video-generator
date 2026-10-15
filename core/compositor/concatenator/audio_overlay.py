@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 from typing import List, Optional, Tuple
 
@@ -265,6 +266,187 @@ class AudioOverlayMixin:
 
         logger.info(f"[Compositor] concat_videos_with_audio_overlay done: {output_path}")
         return output_path
+
+    @staticmethod
+    def concat_videos_keep_audio(
+        video_paths: List[str],
+        srt_path: Optional[str],
+        output_path: str,
+        subtitle_style: Optional[SubtitleStyle] = None,
+        subtitle_styles_path: Optional[str] = None,
+    ) -> str:
+        """拼接视频并保留片段自身音轨，仅叠加字幕（v7.6 需求 A）。
+
+        ``audio_config.enabled == False`` 时不得改动视频自身音轨：本入口不生成、
+        不混入任何 TTS（含静音时间线）音频，原音轨经 ``-map 0:a?`` 原样透传
+        （``-c:a copy``），时长以视频为准（不做音频补静音对齐）。
+
+        与 ``concat_videos_with_audio_overlay`` 的差异：
+        - 不做 ``volume=1.5``（该放大是 edge_tts 低音量的补偿，外部音轨不适用）；
+        - 不替换音轨，无音轨片段产出无音轨成片（而非注入静音轨）。
+
+        Args:
+            video_paths: 按顺序的视频路径列表。
+            srt_path: 整段 SRT 字幕路径（可选；None/不存在则不烧字幕）。
+            output_path: 最终输出文件路径。
+            subtitle_style: 字幕样式配置（None 表示不烧字幕）。
+            subtitle_styles_path: 逐条样式 JSON 路径（透传 2.1c）。
+
+        Returns:
+            输出文件路径。
+        """
+        logger.info(
+            f"[Compositor] concat_videos_keep_audio: {len(video_paths)} videos "
+            f"(keep original audio) → {output_path}"
+        )
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        if not video_paths:
+            raise RuntimeError("No videos to concatenate")
+
+        concat_path = output_path.replace(".mp4", "_concat.mp4")
+        VideoConcatenator.concat_videos(video_paths, concat_path)
+
+        has_sub = bool(srt_path and os.path.exists(srt_path) and subtitle_style)
+        if not has_sub:
+            shutil.move(concat_path, output_path)
+            logger.info("[Compositor] concat_videos_keep_audio done (no subtitle)")
+            return output_path
+
+        burned = AudioOverlayMixin._burn_subtitle_keep_audio(
+            concat_path, srt_path, output_path, subtitle_style, subtitle_styles_path,
+        )
+        if not burned and os.path.exists(concat_path):
+            # 字幕烧录失败：保留音轨优先，降级为仅拼接（无字幕）。
+            logger.error(
+                "[Compositor] keep-audio subtitle burn failed, "
+                "fallback to plain concatenation (audio preserved, subtitle dropped)"
+            )
+            shutil.move(concat_path, output_path)
+            return output_path
+        if os.path.exists(concat_path):
+            try:
+                os.remove(concat_path)
+            except OSError:
+                pass
+
+        logger.info(f"[Compositor] concat_videos_keep_audio done: {output_path}")
+        return output_path
+
+    @staticmethod
+    def _burn_subtitle_keep_audio(
+        concat_path: str,
+        srt_path: str,
+        output_path: str,
+        subtitle_style: SubtitleStyle,
+        subtitle_styles_path: Optional[str] = None,
+    ) -> bool:
+        """烧录字幕并保留原音轨（不重编码音频，先 ``-c:a copy`` 再回退 AAC）。
+
+        Returns:
+            True=成功产出；False=失败（调用方降级为仅拼接）。
+        """
+        try:
+            video_w, video_h = AudioOverlayMixin._get_video_size(concat_path)
+            ass_path, fonts_dir = AudioOverlayMixin._srt_to_ass(
+                srt_path, subtitle_style, video_w, video_h, subtitle_styles_path,
+            )
+        except Exception as e:
+            logger.warning(f"[Compositor] SRT→ASS conversion failed: {e}")
+            return False
+        if not ass_path:
+            return False
+
+        try:
+            esc_path = AudioOverlayMixin._escape_filter_path(ass_path)
+            esc_dir = AudioOverlayMixin._escape_filter_path(fonts_dir or "")
+            v_chain = f"[0:v]subtitles={esc_path}:fontsdir='{esc_dir}'[v]"
+            # 音轨优先 ``-c:a copy`` 原样透传；容器/编码不兼容时回退重编码音频
+            # （仅音频重编码，视频本就因烧字幕需重编码）。
+            for audio_args, mode in (
+                (["-c:a", "copy"], "copy"),
+                (["-c:a", _AUDIO_CODEC, "-b:a", _AUDIO_BITRATE, "-ar", "44100", "-ac", "2"], "aac"),
+            ):
+                cmd = [
+                    resolve_binary("ffmpeg"), "-y",
+                    "-i", concat_path,
+                    "-filter_complex", v_chain,
+                    "-map", "[v]", "-map", "0:a?",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast",
+                    *audio_args,
+                    output_path,
+                ]
+                try:
+                    VideoConcatenator._run_ffmpeg(
+                        cmd, desc=f"burn subtitle (keep original audio, {mode})",
+                    )
+                    return True
+                except RuntimeError as e:
+                    logger.warning(
+                        f"[Compositor] keep-audio subtitle burn ({mode}) failed: {e}"
+                    )
+            return False
+        finally:
+            if os.path.exists(ass_path):
+                try:
+                    os.remove(ass_path)
+                except OSError:
+                    pass
+
+    @staticmethod
+    def concat_scenes_keep_audio(
+        video_paths: List[str],
+        srt_paths: List[Optional[str]],
+        output_path: str,
+        subtitle_style: Optional[SubtitleStyle],
+        subtitle_styles_path: Optional[str] = None,
+    ) -> Optional[str]:
+        """v7.6：多场景「保留原音轨拼接 + 各场景字幕偏移合并」一次产出（poetry 专用）。
+
+        场景视频 ``concat_videos``（2.1a ``-c copy``，原音轨随片段透传）→ 按真实
+        时长累积偏移合并各场景 SRT（``_merge_scene_srts``）→
+        ``concat_videos_keep_audio`` 烧字幕且不改动音轨。
+
+        任何一步失败返回 None（调用方回退既有逐场景合成）。
+
+        Returns:
+            输出路径；失败返回 None。
+        """
+        try:
+            n = len(video_paths)
+            if n < 1 or len(srt_paths) != n:
+                return None
+            for vp in video_paths:
+                if not vp or not os.path.exists(vp):
+                    return None
+
+            base = output_path.replace(".mp4", "")
+            # 偏移按视频实际时长累积（模型产出与规划时长可能有偏差）
+            real_durs = [VideoConcatenator._get_duration(v) for v in video_paths]
+            offsets = list(itertools.accumulate(real_durs, initial=0.0))[:-1]
+
+            total_srt = None
+            if subtitle_style is not None and any(
+                s and os.path.exists(s) for s in srt_paths
+            ):
+                total_srt = base + "_keep_total.srt"
+                if not AudioOverlayMixin._merge_scene_srts(srt_paths, offsets, total_srt):
+                    total_srt = None
+
+            AudioOverlayMixin.concat_videos_keep_audio(
+                video_paths, total_srt, output_path, subtitle_style, subtitle_styles_path,
+            )
+            if total_srt and os.path.exists(total_srt):
+                try:
+                    os.remove(total_srt)
+                except OSError:
+                    pass
+            logger.info(
+                f"[Compositor] concat_scenes_keep_audio done: {n} scenes → {output_path}"
+            )
+            return output_path
+        except Exception as e:
+            logger.warning(f"[Compositor] keep-audio scenes composite failed: {e}")
+            return None
 
     @staticmethod
     def _ffmpeg_mux_aligned(

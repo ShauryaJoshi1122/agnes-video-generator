@@ -17,6 +17,7 @@
 >   - 相关开关：`AGNES_VIDEO_BUSY_RETRY_ATTEMPTS`（视频忙轨重试次数上限，默认 15；单 Key 15×60s ≈ 旧 900s 窗口）、`AGNES_BUSY_RETRY_ATTEMPTS`（非视频忙轨＝图片/上传/Chat 重试次数上限，默认 None＝各 provider 默认：图片 15 / 上传 10 / Chat 20）、`AGNES_FIX_V25_PORTRAIT_ROTATION`（2.5 竖屏躺倒探测校正，默认关闭）
 >   - v7.1 归拢：所有上游重试统一收敛到 `core/api/retry_policy.py` 的「忙轨 / 故障轨」两轨模型（判定 + 间隔计算唯一出处），见 §6.2
 >   - v7.2：忙轨封顶由「总时长预算（秒）」改为「重试次数」，且**首跳 0s 贴着限流**（节奏交给令牌桶，不叠加人工等待）——旧的 `AGNES_VIDEO_QUEUE_RETRY_SECONDS` / `AGNES_BUSY_RETRY_SECONDS` 已更名并改语义（总时长 → 次数）
+> - 外部素材模式（v7.6，即梦协作）：`docs/plans/v7.6/external_asset_mode_PRD.md`（方案）+ `docs/plans/v7.6/system_design.md`（增量设计，权威契约）；用户指南 `docs/public/manual_mode_guide.md` 第五节；工具注册表 `core/providers.py`（首期仅 `jimeng`，**不开放自定义工具**）；产物导入/探针端点 `POST /api/tasks/{id}/artifacts/import`（归一化 + 探针回显）、`GET /api/tasks/{id}/artifacts/probe`、`GET /api/providers`；合成三态 `concat_videos_keep_audio`（保原音轨）；回归见 `docs/dev/regression_test_plan.md` §十三 `X1`；单测 `tests/test_external_assets.py`
 > - 优化路线图：`docs/plans/v6.0/optimization_roadmap.md`（合并版，现行唯一路线图，计划 v6 版本线内完成；已取代并废弃 `docs/plans/v5.0/optimization_roadmap.md`）
 > - 待调研存档：`docs/plans/optimization-research/README.md`
 > - 发版规范：`docs/dev/release_process.md`（版本号规则 + 新增内容规范 + 发布流程）

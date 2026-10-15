@@ -335,6 +335,20 @@ class BasePipeline(ABC):
         checkpoint = _STEP_TO_CHECKPOINT.get(step_name)
         if not checkpoint:
             return False
+
+        # v7.6 外部素材模式：音频来源=视频（保留视频自带音轨、不生成 TTS）
+        # → audio 检查点无产物可确认，自动通过。
+        if (
+            checkpoint == CHECKPOINT_AUDIO
+            and getattr(mc, "execution_mode", "auto") == "external"
+            and getattr(mc, "audio_source", "project") == "video"
+        ):
+            logger.info(
+                "[Pipeline] Task %s external mode keeps video audio, "
+                "audio checkpoint auto-passed", self.task_id,
+            )
+            return False
+
         if checkpoint not in mc.pause_points:
             return False
         if checkpoint in mc.approved_checkpoints:
@@ -387,6 +401,45 @@ class BasePipeline(ABC):
     def _t(self, key: str, **params) -> str:
         """``translate(key, self._ui_lang(), **params)`` 的快捷方式。"""
         return translate(key, self._ui_lang(), **params)
+
+    def _keeps_video_audio(self) -> bool:
+        """是否处于「保留视频自带音轨」的外部素材模式（v7.6）。
+
+        该模式（``execution_mode == "external`` 且 ``audio_source == "video"``）下
+        不再生成/采集本项目 TTS 音频或词级 cues，字幕时间轴改按**各场景视频真实时长**
+        对齐（见 :meth:`resolve_segment_durations`）。
+        """
+        mc = getattr(getattr(self, "_state", None), "manual_config", None)
+        return bool(
+            mc
+            and getattr(mc, "execution_mode", "auto") == "external"
+            and getattr(mc, "audio_source", "project") == "video"
+        )
+
+    def resolve_segment_durations(self, video_paths: list, fallback: list) -> list:
+        """解析字幕分段时长（v7.6）：外部素材模式用视频真实时长，否则用计划时长。
+
+        Args:
+            video_paths: 各分段视频文件路径（按展示顺序）。
+            fallback: 各分段计划时长（秒），探测失败时逐项回退。
+
+        Returns:
+            与 ``video_paths`` 等长的时长列表（秒）。
+        """
+        if not self._keeps_video_audio():
+            return [float(d) for d in fallback]
+        from core.compositor.ffmpeg_tool import probe_duration
+
+        durations: list = []
+        for i, path in enumerate(video_paths):
+            base = float(fallback[i]) if i < len(fallback) else 5.0
+            d = probe_duration(path, 0.0) if path else 0.0
+            durations.append(float(d) if d and d > 0 else base)
+        logger.info(
+            "[Pipeline] External keep-audio: subtitle durations from real videos = %s",
+            durations,
+        )
+        return durations
 
     def _submit_progress_callback(self, step: str, progress: float):
         """U1（v7.0）：提交侧进度回调，供 ``AgnesVideoAPI.submit_video`` 使用。
@@ -721,6 +774,9 @@ class BasePipeline(ABC):
         Returns:
             cues 兼容对象（含 ``.cues``）；不需要或失败时返回 None。
         """
+        # v7.6 外部素材模式：字幕按视频真实时长对齐，不恢复 TTS cues。
+        if self._keeps_video_audio():
+            return None
         if not narration_text:
             return None
         use_cue = getattr(subtitle_config, "use_cue_timeline", True)
@@ -827,6 +883,15 @@ class BasePipeline(ABC):
             return None
 
         silent_tts = SilentTTSEngine()
+
+        # v7.6 外部素材模式（保留视频自带音轨）：本项目不生成/采集 TTS 音频或 cues，
+        # 只落一段静音占位（合成层会走 keep-audio 路径，字幕按视频真实时长对齐）。
+        if self._keeps_video_audio():
+            await silent_tts.generate(
+                text=text, output_path=output_path,
+                **({"duration_sec": duration_sec} if duration_sec else {}),
+            )
+            return None
 
         # 路径 A：音频开 → EdgeTTS 生成
         if audio_enabled:

@@ -14,8 +14,8 @@ const { switchMode, loadTaskList } = useTasks()
 const { startPolling, setRunning, setProgressMessageHtml } = useProgress()
 const { showToast } = useToast()
 
-// 四卡片选择：AI 帮我改 / 我自己改 / 外部 Agent 改 / 在线编辑
-const activeCard = ref<'ai' | 'self' | 'agent' | 'edit'>('ai')
+// 四卡片选择：AI 帮我改 / 我自己改 / 外部 Agent 改 / 在线编辑 +（v7.6）外部工具协作
+const activeCard = ref<'ai' | 'self' | 'agent' | 'edit' | 'collab'>('ai')
 
 // 官网"其他免费 AI 工具"页面（官网提供 zh / en 多语言路径，其余语言回退 en）
 const moreToolsHref = computed(() => {
@@ -56,6 +56,48 @@ async function loadCheckpoint() {
   }
 }
 loadCheckpoint()
+
+// ── v7.6 外部素材模式：外部工具协作卡片（external_hint 非空时展示）──
+const collabHint = computed(() => checkpointData.value?.external_hint || null)
+const collabProvider = computed<any>(() => collabHint.value?.provider || {})
+// 可批量导入的检查点：参考图 → image，视频片段 → video
+const importKind = computed(() => (props.checkpoint === 'references' ? 'image' : props.checkpoint === 'videos' ? 'video' : ''))
+const canImport = computed(() => !!importKind.value && !!collabHint.value)
+const copyingPrompt = ref(false)
+const importing = ref(false)
+const importResults = ref<any[]>([])
+
+async function copyCollabPrompt() {
+  const ok = await copyText(collabHint.value?.prompt || '')
+  if (!ok) return
+  copyingPrompt.value = true
+  setTimeout(() => (copyingPrompt.value = false), 1500)
+}
+
+// 批量导入外部产物 → 归一化 + 探针回显 → 刷新检查点详情
+async function onImportFiles(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = Array.from(input.files || [])
+  if (!files.length) return
+  importing.value = true
+  try {
+    const d = await api.importArtifacts(props.taskId, files, importKind.value)
+    if (!d.ok) throw new Error((d as any).detail || t('failContinue'))
+    importResults.value = d.results || []
+    await loadCheckpoint()
+    showToast(t('checkpoint.import.done'))
+  } catch (err: any) {
+    showToast(err?.message || t('failContinue'), 4500)
+  } finally {
+    importing.value = false
+    input.value = ''
+  }
+}
+
+// 无音轨片段（外部素材模式下应带原生音频，缺音轨需醒目提示）
+function probeNoAudio(r: any): boolean {
+  return r?.probe?.has_audio === false
+}
 
 // ── 通道 1：AI 帮我改（文本 / 图片产物；视频/音频不支持）──
 const aiSupportedCategories = ['text', 'json', 'subtitle']
@@ -331,8 +373,8 @@ function artLabel(a: any): string {
       <span class="text-xs text-muted ml-3">{{ t('continueNoChangeHint') }}</span>
     </div>
 
-    <!-- 四卡片 -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+    <!-- 卡片：AI / 自己 / Agent / 在线编辑 +（v7.6）外部工具协作 -->
+    <div class="grid grid-cols-1 gap-3 mb-4" :class="collabHint ? 'md:grid-cols-5' : 'md:grid-cols-4'">
       <button v-if="aiModifiableArts.length" class="p-3 rounded-xl border text-left transition" :class="activeCard === 'ai' ? 'border-accent bg-accent/10' : 'border-rule bg-paper-2/30 hover:border-accent/40'" @click="activeCard = 'ai'">
         <div class="text-sm font-medium text-ink-2">{{ t('handleAi') }}</div>
         <div class="text-xs text-muted mt-0.5">{{ t('handleAiDesc') }}</div>
@@ -358,6 +400,11 @@ function artLabel(a: any): string {
         <div class="text-sm font-medium" :class="editableTextArts.length ? 'text-ink-2' : 'text-muted'">{{ t('handleEdit') }}</div>
         <div class="text-xs text-muted mt-0.5">{{ t('handleEditDesc') }}</div>
         <div v-if="!editableTextArts.length" class="text-[10px] text-muted mt-1">🚫 {{ t('editTextOnly') }}</div>
+      </button>
+      <!-- v7.6 外部素材模式：外部工具协作（仅 external_hint 非空时展示） -->
+      <button v-if="collabHint" class="p-3 rounded-xl border text-left transition" :class="activeCard === 'collab' ? 'border-accent bg-accent/10' : 'border-rule bg-paper-2/30 hover:border-accent/40'" @click="activeCard = 'collab'">
+        <div class="text-sm font-medium text-ink-2">{{ collabProvider.icon }} {{ t('checkpoint.collab.title').replace('{name}', collabProvider.name || '') }}</div>
+        <div class="text-xs text-muted mt-0.5">{{ collabProvider.name }}</div>
       </button>
     </div>
 
@@ -424,7 +471,59 @@ function artLabel(a: any): string {
       <textarea rows="3" class="w-full glass-input rounded-lg px-3 py-2 text-sm text-ink font-mono text-xs resize-y" :value="t('agentPromptTemplate').replace('{dir}', checkpointData?.working_dir || '')" readonly></textarea>
     </div>
 
-    <!-- 通道 4 面板：在线编辑 -->
+    <!-- v7.6 通道：外部工具协作 -->
+    <div v-else-if="activeCard === 'collab' && collabHint" class="space-y-3">
+      <div>
+        <label class="block text-xs text-muted mb-1">{{ t('agentPrompt') }}</label>
+        <textarea rows="5" readonly class="w-full glass-input rounded-lg px-3 py-2 text-xs text-ink font-mono resize-y" :value="collabHint.prompt"></textarea>
+        <button class="mt-2 text-xs px-4 py-2 bg-accent text-accent-ink rounded-lg transition" @click="copyCollabPrompt">
+          {{ copyingPrompt ? t('checkpoint.collab.copied') : t('checkpoint.collab.copy_prompt') }}
+        </button>
+      </div>
+      <p v-if="collabHint.fill_guide" class="text-xs text-muted whitespace-pre-wrap">📥 {{ collabHint.fill_guide }}</p>
+      <p v-if="collabHint.notes" class="text-xs text-muted whitespace-pre-wrap">ℹ️ {{ collabHint.notes }}</p>
+
+      <!-- 批量导入（仅 references / videos 检查点） -->
+      <div v-if="canImport" class="pt-2 border-t border-rule/40 space-y-2">
+        <div class="flex flex-wrap items-center gap-3">
+          <label class="cursor-pointer px-4 py-2 glass-input rounded-lg text-xs transition inline-block hover:border-blue-500/30">
+            <span>{{ importing ? t('submitting') : t('checkpoint.import.select') }}</span>
+            <input type="file" multiple :accept="importKind === 'image' ? 'image/*' : 'video/*'" class="hidden" @change="onImportFiles" />
+          </label>
+          <span class="text-xs text-muted">{{ t('checkpoint.import.title') }} · {{ t('checkpoint.import.kind') }}: {{ importKind }}</span>
+        </div>
+        <div v-if="importResults.length" class="overflow-auto rounded-lg border border-rule/40">
+          <table class="w-full text-xs">
+            <thead class="text-muted bg-paper-2/40">
+              <tr>
+                <th class="text-left px-2 py-1 font-medium"></th>
+                <th class="text-left px-2 py-1 font-medium">{{ t('checkpoint.probe.duration') }}</th>
+                <th class="text-left px-2 py-1 font-medium">{{ t('checkpoint.probe.resolution') }}</th>
+                <th class="text-left px-2 py-1 font-medium">{{ t('checkpoint.probe.fps') }}</th>
+                <th class="text-left px-2 py-1 font-medium">{{ t('checkpoint.probe.audio') }}</th>
+                <th class="text-left px-2 py-1 font-medium">{{ t('checkpoint.probe.codec') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(r, i) in importResults" :key="i" class="border-t border-rule/30" :class="probeNoAudio(r) ? 'text-amber-400' : 'text-ink-2'">
+                <td class="px-2 py-1 break-all">
+                  {{ r.file }}
+                  <span v-if="r.scene" class="text-[10px] text-muted"> → {{ r.scene }}</span>
+                </td>
+                <td class="px-2 py-1">{{ r.probe?.duration != null ? r.probe.duration + 's' : '—' }}</td>
+                <td class="px-2 py-1">{{ r.probe?.width != null ? r.probe.width + '×' + r.probe.height : '—' }}</td>
+                <td class="px-2 py-1">{{ r.probe?.fps != null ? r.probe.fps : '—' }}</td>
+                <td class="px-2 py-1">{{ r.probe?.has_audio ? '✓' : '✗' }}</td>
+                <td class="px-2 py-1 break-all">{{ r.probe?.vcodec || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-if="importResults.some(probeNoAudio)" class="text-xs text-amber-400">⚠️ {{ t('checkpoint.import.no_audio') }}</p>
+      </div>
+    </div>
+
+    <!-- 通道 4 面板：在线编辑（默认/回退） -->
     <div v-else class="space-y-3">
       <p class="text-xs text-muted">{{ t('handleEditDesc') }}</p>
       <div v-if="editableTextArts.length" class="flex flex-wrap gap-x-4 gap-y-1 text-xs">

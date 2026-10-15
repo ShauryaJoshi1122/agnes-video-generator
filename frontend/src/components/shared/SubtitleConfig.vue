@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, watch } from 'vue'
 import { t } from '@/i18n'
 import VoiceSelector from './VoiceSelector.vue'
 
@@ -8,11 +8,25 @@ const props = defineProps<{
   task: string // c/m/a/p
   withStyle?: boolean // 诗词为 false（仅开关）
   defaultFontsize?: number
+  // v7.6 外部素材模式：音频来自视频自身 → 默认关配音、开字幕
+  external?: boolean
 }>()
 
 const audioEnabled = ref(true)
 const subtitleEnabled = ref(true)
 const rate = ref('+0%')
+
+// 切到外部素材模式时套用默认值（用户仍可手动改回）
+watch(
+  () => props.external,
+  (v) => {
+    if (v) {
+      audioEnabled.value = false
+      subtitleEnabled.value = true
+    }
+  },
+  { immediate: true },
+)
 
 const styleMode = ref<'fixed' | 'llm'>('fixed')
 const style = reactive({

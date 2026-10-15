@@ -525,4 +525,47 @@ for name, color in [('test_ref.png', (100,150,200)), ('test_end.png', (200,150,1
 
 ---
 
-*文档版本：v3.6 | 更新日期：2026-09-29 | 变更：新增 ffmpeg/ffprobe 调用收口回归（Issue #78）*
+## 十三、v7.6 外部素材模式回归（增量）
+
+> 新增于 v7.6（`docs/plans/v7.6/external_asset_mode_PRD.md` + `docs/plans/v7.6/system_design.md`）。
+> 外部素材模式 = 手动模式的增强版：在检查点暂停后，用外部工具（即梦 / Dreamina）生成
+> 分镜视频/图片，把 mp4/png 批量导回本项目，由本项目负责归一化、拼接与字幕对齐。
+> 不进入 S1/A1–A2 权重计算，作为专项验证；单测见 `tests/test_external_assets.py`。
+>
+> **ID 说明**：本专项端到端场景命名 `X1`；§3.3 服务端点表中的 `E1` 为 `GET /`，
+> 与外部素材场景互不冲突（设计文档早期曾拟用 `E1`，此处改用 `X1`）。
+
+### 13.1 端到端场景（自动）
+
+| ID | 类型 | 场景 | 验证要点 |
+|----|------|------|---------|
+| X1 | 外部素材·创意 | 即梦回填视频 + 字幕 + 保留音轨（`execution_mode=external`、`audio_source=video`） | 创建改走 `execution_mode=external`、`provider=jimeng`、`audio_source=video` 且 `audio_config.enabled=False`；`audio` 检查点自动通过（不暂停）；`videos` 检查点 `external_hint` 非空；把即梦导出的 mp4 经 `POST .../artifacts/import` 回填 → `scene_{i}/video.mp4`（归一化到任务分辨率/帧率/编码并回显探针）；合成走 `concat_videos_keep_audio`（保留原音轨 + 烧字幕），**不**注入静音轨；字幕时间轴按各场景真实时长（`ffprobe`）估时 |
+
+### 13.2 端点验证补充（自动）
+
+| 端点 | 验证内容 | 期望结果 |
+|------|---------|---------|
+| `GET /api/providers` | 返回注册表（首期仅 `jimeng`），**不含**提示词模板字段 | 200，`providers:[{id,name,icon,capabilities,notes}]` |
+| `POST /api/tasks/{id}/artifacts/import` | `kind` 非 `image`/`video` → 422；`scene_map` 非 JSON dict → 422；无文件 → 400；运行中 → 409；task 不存在 → 404 | 按上述返回 |
+| `POST /api/tasks/{id}/artifacts/import` | 视频回填：`files[]` 文件名带序号 → `scene_{N-1}/video.mp4`；无序号 → 按上传顺序；`scene_map` 显式指定优先 | 200，`results[].probe` 含 duration/width/height/fps/has_audio/vcodec |
+| `POST /api/tasks/{id}/artifacts/import` | creative + `kind=image` → 同时登记 `scene_reference_images[pos]`（使该场景以导入图为参考） | 200，`task_state.json` 的 `scene_reference_images` 有值 |
+| `GET /api/tasks/{id}/artifacts/probe?relpath=...` | 单文件探针回显；`relpath` 路径穿越（如 `../task_state.json`）→ 404 | 200 / 404 |
+
+### 13.3 单测（自动，`tests/test_external_assets.py`）
+
+| ID | 条目 | 验证要点 |
+|----|------|---------|
+| X2 | 注册表 | `list_providers()` 仅 `jimeng`；`get_provider(""/"bogus")` 回退 `jimeng`；`has_capability` 四项能力为真；`checkpoint_prompts` 覆盖 scenes/references/videos/subtitle；`render_prompt` 填充 `<任务目录>` 且未定义检查点返回空串；`provider_public` 默认不含 `checkpoint_prompts` |
+| X3 | 导入映射 | `_resolve_scene_target`：文件名数字 `N` → `scene_{N-1}`；无数字（去扩展名）→ 按上传顺序；`scene_map` 显式优先；manuscript → `para_` 前缀；image → `ref.png`；anchor → `clip/clip.mp4` / `anchor.png` |
+| X4 | 归一化 + 探针 | `normalize_external_video` 输出目标分辨率（768×1152）、h264、含 fps；无音轨片段不补静音；`probe_media` 文件缺失时 `duration=0.0`/`has_audio=False`；`normalize_external_image` 输出目标尺寸 PNG |
+| X5 | keep-audio 判定 | `BasePipeline._keeps_video_audio`：`external` + `audio_source=video` → True；`project` / `manual` → False；无 `_state` 替身不抛异常 |
+
+### 13.4 自动模式回归不变
+
+`execution_mode` 缺省 `auto`、`audio_source` 缺省 `project` 时，行为与 v7.5 完全一致；
+`_build_manual_config("auto", ...)` 早返回 `ManualConfig()`，旧兼容端点（`/api/tasks` 别名）
+不受新增 `Form` 字段影响。
+
+---
+
+*文档版本：v3.7 | 更新日期：2026-10-15 | 变更：新增 v7.6 外部素材模式回归（即梦协作）*

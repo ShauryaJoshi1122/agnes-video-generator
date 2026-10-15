@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { t } from '@/i18n'
 import { appState } from '@/store'
 import { useGa } from '@/composables/useGa'
+import * as api from '@/api'
 import SimpleForm from './forms/SimpleForm.vue'
 import CreativeForm from './forms/CreativeForm.vue'
 import ManuscriptForm from './forms/ManuscriptForm.vue'
@@ -72,6 +73,27 @@ const defaultPausePoints: Record<string, string[]> = {
   anchor: ['scenes', 'videos'],
 }
 
+// v7.6 外部素材模式：各类型默认暂停点（后端亦有默认，前端预填保持一致）
+const externalDefaultPausePoints: Record<string, string[]> = {
+  creative: ['scenes', 'references', 'videos', 'subtitle'],
+  manuscript: ['scenes', 'videos', 'subtitle'],
+  poetry: ['scenes', 'videos', 'subtitle'],
+  anchor: ['scenes', 'videos'],
+}
+
+// v7.6 外部素材模式：拉取外部工具注册表（GET /api/providers），默认选中第一项
+onMounted(async () => {
+  try {
+    const d = await api.getProviders()
+    if (d?.ok && Array.isArray(d.providers)) {
+      appState.providers = d.providers
+      if (!appState.providerSelected && d.providers.length) appState.providerSelected = d.providers[0].id
+    }
+  } catch {
+    /* 拉取失败：保持为空，用户仍可提交（后端默认回退 jimeng） */
+  }
+})
+
 function switchTaskType(type: string) {
   trackEvent('ui_action', { action: 'switch_task_type', type })
   appState.currentTaskType = type
@@ -85,11 +107,15 @@ function togglePausePoint(key: string) {
   else appState.pausePoints.push(key)
 }
 
-function selectExecMode(mode: 'auto' | 'manual') {
-  if (mode === 'manual' && !manualSupported.value) return
+function selectExecMode(mode: 'auto' | 'manual' | 'external') {
+  if (mode !== 'auto' && !manualSupported.value) return
   appState.execMode = mode
   if (mode === 'manual' && appState.pausePoints.length === 0) {
     appState.pausePoints = [...(defaultPausePoints[appState.currentTaskType] || [])]
+  }
+  if (mode === 'external') {
+    if (!appState.providerSelected && appState.providers.length) appState.providerSelected = appState.providers[0].id
+    appState.pausePoints = [...(externalDefaultPausePoints[appState.currentTaskType] || [])]
   }
 }
 </script>
@@ -117,8 +143,41 @@ function selectExecMode(mode: 'auto' | 'manual') {
           >
             {{ t('execManual') }}
           </button>
+          <button
+            class="px-4 py-2 rounded-lg text-sm font-medium transition border"
+            :class="appState.execMode === 'external' ? 'bg-accent text-accent-ink border-accent' : 'bg-paper-2/50 border-rule text-ink-2 hover:border-accent/40'"
+            :disabled="!manualSupported"
+            :title="!manualSupported ? t('manualUnsupported') : ''"
+            @click="selectExecMode('external')"
+          >
+            {{ t('execMode.external') }}
+          </button>
         </div>
         <span class="text-xs text-muted">{{ t('execModeHint') }}</span>
+      </div>
+
+      <!-- v7.6 外部素材模式：工具下拉 + 音频来源 + 提示 -->
+      <div v-if="appState.execMode === 'external' && manualSupported" class="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
+        <div>
+          <label class="block text-xs text-muted mb-1">{{ t('execMode.provider') }}</label>
+          <select v-model="appState.providerSelected" class="glass-input rounded-lg px-3 py-2 text-sm text-ink min-w-48">
+            <option v-for="p in appState.providers" :key="p.id" :value="p.id">{{ p.icon }} {{ p.name }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-muted mb-1">{{ t('execMode.audio_source') }}</label>
+          <div class="flex flex-col gap-1.5">
+            <label class="flex items-center gap-2 text-sm text-ink-2 cursor-pointer">
+              <input v-model="appState.externalAudioSource" type="radio" name="ext_audio_source" value="video" class="text-accent" />
+              <span>{{ t('execMode.audio_source.video') }}</span>
+            </label>
+            <label class="flex items-center gap-2 text-sm text-ink-2 cursor-pointer">
+              <input v-model="appState.externalAudioSource" type="radio" name="ext_audio_source" value="project" class="text-accent" />
+              <span>{{ t('execMode.audio_source.project') }}</span>
+            </label>
+          </div>
+        </div>
+        <p class="text-xs text-muted max-w-2xl basis-full">{{ t('execMode.external_hint') }}</p>
       </div>
 
       <!-- 手动模式：暂停点多选（PRD §6.1） -->

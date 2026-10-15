@@ -771,8 +771,32 @@ CATALOG: Dict[str, Dict[str, str]] = {
         "en": "Scene {scene_index} duration must be within 2-30 seconds",
     },
     "validation.execution_mode_invalid": {
-        "zh": "execution_mode 必须为 auto 或 manual",
-        "en": "execution_mode must be either auto or manual",
+        "zh": "execution_mode 必须为 auto、manual 或 external",
+        "en": "execution_mode must be auto, manual, or external",
+    },
+    "validation.audio_source_invalid": {
+        "zh": "audio_source 必须为 project 或 video",
+        "en": "audio_source must be either project or video",
+    },
+    "validation.import_kind_invalid": {
+        "zh": "kind 必须为 image 或 video",
+        "en": "kind must be either image or video",
+    },
+    "validation.import_scene_map_invalid": {
+        "zh": "scene_map 必须为 JSON 对象（场景序号 → 目录名）",
+        "en": "scene_map must be a JSON object (scene index → directory name)",
+    },
+    "artifacts.import_no_files": {
+        "zh": "未收到任何文件",
+        "en": "No files received",
+    },
+    "artifacts.import_partial": {
+        "zh": "已导入 {ok} 个文件，{failed} 个失败",
+        "en": "Imported {ok} file(s), {failed} failed",
+    },
+    "artifacts.probe_missing": {
+        "zh": "文件不存在",
+        "en": "File not found",
     },
     "validation.pause_points_not_list": {
         "zh": "pause_points 必须为 JSON 数组",

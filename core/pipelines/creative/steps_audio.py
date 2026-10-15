@@ -382,12 +382,23 @@ class AudioStepsMixin:
             else [float(self._state.video_duration)]
         )
 
+        # v7.6 外部素材模式（保留视频自带音轨）：字幕按各场景视频真实时长对齐，
+        # 且不用本项目（静音占位）音频时长做整体缩放。
+        audio_path_for_srt = os.path.join(self.working_dir, "combined_narration.mp3")
+        if self._keeps_video_audio():
+            scene_video_paths = [
+                os.path.join(self.working_dir, f"scene_{i}", "video.mp4")
+                for i in range(num_scenes)
+            ]
+            scene_durations = self.resolve_segment_durations(scene_video_paths, scene_durations)
+            audio_path_for_srt = ""
+
         srt_path, styles_path = await self.generate_subtitles_common(
             segment_texts=scene_texts,
             segment_durations=scene_durations,
             subtitle_config=self._state.subtitle_config,
             sub_maker=sub_maker,
-            audio_path=os.path.join(self.working_dir, "combined_narration.mp3"),
+            audio_path=audio_path_for_srt,
             srt_filename="combined_narration.srt",
             screenwriter=self.screenwriter,
             video_width=self._state.video_width,
@@ -464,24 +475,33 @@ class AudioStepsMixin:
         if styles_path and not os.path.exists(styles_path):
             styles_path = ""
 
-        if has_audio or has_subtitle:
-            audio_exists = os.path.exists(combined_audio) and os.path.getsize(combined_audio) > 0
-            srt_exists = os.path.exists(combined_srt) and os.path.getsize(combined_srt) > 0
+        audio_exists = os.path.exists(combined_audio) and os.path.getsize(combined_audio) > 0
+        srt_exists = os.path.exists(combined_srt) and os.path.getsize(combined_srt) > 0
 
-            if audio_exists:
-                await asyncio.to_thread(
-                    VideoConcatenator.concat_videos_with_audio_overlay,
-                    video_paths=all_video_paths,
-                    audio_path=combined_audio,
-                    srt_path=combined_srt if (has_subtitle and srt_exists) else None,
-                    output_path=final_video_path,
-                    subtitle_style=self._state.subtitle_config.style if has_subtitle else None,
-                    subtitle_styles_path=styles_path if styles_path else None,
-                )
-            else:
-                await asyncio.to_thread(
-                    VideoConcatenator.concat_videos, all_video_paths, final_video_path
-                )
+        # v7.6 需求 A：完全不勾选配音时不得改动视频自身音轨（不再用静音轨替换）。
+        # 三态：配音开 → 叠加本项目音频；配音关+字幕开 → 保留原音轨只烧字幕；
+        # 其余 → 纯拼接。
+        use_keep_audio = (not has_audio) and has_subtitle and srt_exists
+
+        if has_audio and audio_exists:
+            await asyncio.to_thread(
+                VideoConcatenator.concat_videos_with_audio_overlay,
+                video_paths=all_video_paths,
+                audio_path=combined_audio,
+                srt_path=combined_srt if (has_subtitle and srt_exists) else None,
+                output_path=final_video_path,
+                subtitle_style=self._state.subtitle_config.style if has_subtitle else None,
+                subtitle_styles_path=styles_path if styles_path else None,
+            )
+        elif use_keep_audio:
+            await asyncio.to_thread(
+                VideoConcatenator.concat_videos_keep_audio,
+                video_paths=all_video_paths,
+                srt_path=combined_srt,
+                output_path=final_video_path,
+                subtitle_style=self._state.subtitle_config.style,
+                subtitle_styles_path=styles_path if styles_path else None,
+            )
         else:
             await asyncio.to_thread(
                 VideoConcatenator.concat_videos, all_video_paths, final_video_path

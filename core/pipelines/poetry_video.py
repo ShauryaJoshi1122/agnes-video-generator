@@ -398,8 +398,14 @@ class PoetryVideoPipeline(MultiScenePipeline):
             if not text:
                 continue
 
-            # 字幕时长 = 朗诵音频时长（首段显示，余下静默）
-            audio_dur = self.get_audio_duration(scene.narration_audio or "")
+            # 字幕时长 = 朗诵音频时长（首段显示，余下静默）；
+            # v7.6 外部素材模式（保留视频自带音轨）改按该场景视频真实时长对齐。
+            if self._keeps_video_audio():
+                from core.compositor.ffmpeg_tool import probe_duration
+
+                audio_dur = probe_duration(os.path.join(scene_dir, "video.mp4"), 0.0)
+            else:
+                audio_dur = self.get_audio_duration(scene.narration_audio or "")
             dur = max(audio_dur, 1.0)
             await self._emit(
                 "subtitle", "running",
@@ -463,6 +469,26 @@ class PoetryVideoPipeline(MultiScenePipeline):
             audio_paths.append(audio_path)
             srt_paths.append(srt_path if (has_subtitle and srt_exists) else None)
             clip_outs.append(os.path.join(scene_dir, "final_clip.mp4"))
+
+        # ── v7.6 需求 A：配音关 → 保留视频自身音轨，仅按场景偏移烧字幕 ──
+        # （poetry 的逐场景 narration 在配音关时为静音占位，不应替换原音轨）
+        if not self._state.audio_config.enabled:
+            await self._emit(
+                "concatenate", "running",
+                self._t("progress.poetry.composite_single_pass", n=len(scenes)),
+                _PROGRESS_COMPOSITE_SCENE,
+            )
+            result = await asyncio.to_thread(
+                VideoConcatenator.concat_scenes_keep_audio,
+                video_paths,
+                [s if has_subtitle else None for s in srt_paths],
+                output_path,
+                POETRY_SUBTITLE_STYLE if has_subtitle else None,
+                None,
+            )
+            if result:
+                return result
+            logger.warning("[Poetry] keep-audio composite failed, fallback per-scene")
 
         # ── 快速路径：所有 final_clip 已存在且有音频（续传）→ 直接拼接 ──
         if all(

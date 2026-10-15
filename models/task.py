@@ -116,6 +116,10 @@ class ManualConfig(BaseModel):
     modified_artifacts: list[str] = []    # 最近一次回填的产物 id（脏标记）
     current_checkpoint: str = ""          # 当前暂停/待展示的检查点（空 = 无暂停）
     timeout_minutes: int = 0              # 0 = 不超时
+    # ── v7.6 外部素材模式 ──
+    execution_mode: str = "auto"          # auto | manual | external（external 时 enabled=True）
+    provider: str = ""                    # 外部工具 id（external 模式；首期仅 "jimeng"）
+    audio_source: str = "project"         # project（本项目 TTS）| video（保留视频自带音轨）
 
     @property
     def is_manual(self) -> bool:

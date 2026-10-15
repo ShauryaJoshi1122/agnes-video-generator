@@ -132,9 +132,13 @@ async function submitPoetry() {
         fd.append('subtitle_enabled', String(sc.subtitleEnabled))
       }
 
-      // v6.0 手动模式：执行模式 + 暂停点
+      // v6.0 手动模式 / v7.6 外部素材模式：执行模式 + 暂停点 + 工具与音频来源
       fd.append('execution_mode', appState.execMode)
-      fd.append('pause_points', JSON.stringify(appState.execMode === 'manual' ? appState.pausePoints : []))
+      fd.append('pause_points', JSON.stringify(appState.execMode !== 'auto' ? appState.pausePoints : []))
+      if (appState.execMode === 'external') {
+        fd.append('provider', appState.providerSelected || 'jimeng')
+        fd.append('audio_source', appState.externalAudioSource)
+      }
 
       ev = {
         style: form.style,
@@ -250,7 +254,7 @@ async function submitPoetry() {
     </div>
 
     <!-- Audio & Subtitle（诗词仅开关） -->
-    <SubtitleConfig ref="subtitleRef" task="p" :with-style="false" />
+    <SubtitleConfig ref="subtitleRef" task="p" :with-style="false" :external="appState.execMode === 'external'" />
 
     <WatermarkToggle />
 
