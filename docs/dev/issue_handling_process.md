@@ -3,7 +3,7 @@
 > 面向对象：维护 / 开发本项目的 AI Agent
 > 目标仓库：`lcy362/agnes-video-generator`
 > 状态：🟢 初版可用，后续持续迭代
-> 版本：v0.9 | 更新日期：2026-10-12
+> 版本：v0.10 | 更新日期：2026-10-14
 
 ***
 
@@ -101,8 +101,6 @@ gh issue list --repo lcy362/agnes-video-generator --state open \
 
 > 例外：Issue 正文或评论若为纯广告 / 灌水（垃圾噪音），不适用语言规则，按第 4 节直接关闭。
 
-> 例外：Issue 正文或评论若为纯广告 / 灌水（垃圾噪音），不适用语言规则，按第 4 节直接关闭。
-
 #### 4.2 回复行文规范（简短，不讲逻辑）
 
 面向用户的回复**只写结论与操作**，不写内部机制。硬约束：
@@ -122,7 +120,8 @@ gh issue list --repo lcy362/agnes-video-generator --state open \
 
 * **周期性**（建议按版本或每月）将累积问题整理进官网 FAQ：
 
-  * 中文：`docs/public/faq.md`；英文：`docs/public/faq.zh.md`（英文为中文翻译版）。
+  * 中文：`docs/public/faq.zh.md`；英文：`docs/public/faq.md`（英文为原始正文，中文文件为中文版）。
+    > 修订（2026-10-15）：原映射写反（原写「中文 `faq.md` / 英文 `faq.zh.md`」），实际 `faq.md` 为英文、`faq.zh.md` 为中文。
 
   * 遵守多语言规范，FAQ 文案不得硬编码。
 
@@ -160,6 +159,23 @@ gh issue list --repo lcy362/agnes-video-generator --state open \
 | creative 任务在 `video_gen` 失败（**7.0.5** / Windows / Opera），`errorMessage` 为 `Agnes video queue is full (HTTP 503 · video_queue_full); after retrying for 15 min the job never entered the queue, so nothing was generated (no quota used)…`；报告 **UI Language: en**，1280×720 / 7 场景 / keyframes，`Retry Count: 0` | 上游视频队列饱和，与 #47/#63 同族；但**本次 body 带 `video_queue_full` code**，命中 v7.0 U1 队列长预算轨道（`AGNES_VIDEO_QUEUE_RETRY_SECONDS` 默认 900s），因此**正确重试满 15 分钟**仍未入队后放弃——这是队列轨道**按设计工作**的正向对照，区别于 #80/#81/#83/#84 的**裸 503**（无 code、只走普通 `>=500` 分支、约 5.5 分钟即弃）。被拒发生在入队前，未创建任务、未消耗配额 | 英文回复（UI Language: en，标注 agent）：确认外部容量问题＋未生成未消耗＋错峰重试（免费队列高峰在欧美/亚洲工作时段）＋Retry Task 从 `video_gen` 续传（分镜/参考图保留不重提交）＋降载（更少场景/更短时长/更小分辨率）＋换视频模型（队列按模型分池）＋多 Key 线性提配额。**本轮无代码改动，非缺口**（与裸 503 待办对照，本例证明带 code 的队列轨道已生效）。附带：报告中 `Style: 电影质感写实风格` 是后端硬编码中文默认值泄漏到 en 界面任务（`task_creation_routes.py` Form 默认 + FastAPI 把空串视作缺省重填、`models/task.py` pydantic 默认、`scenes.py` screenwriter 兜底），属数据非语言判据，另列改进 | #87 |
 | creative 任务在 `end_frame_gen` 失败（**7.0.5** / Windows），`errorMessage` 为 `PIL.UnidentifiedImageError: cannot identify image file '…\\.working_dir\\uploads\\{task_id}_end_1.png'`，`Retry Count: 4`（四次重试同一环节同一错误），报告 **Idioma de la interfaz: es** | **用户上传的自定义尾帧文件本身不是可解码图片**（机制已核实到行，字节级成因待用户补数据）。链路：`use_custom_end_frames` 时逐段尾帧由 `web/routes/task_creation_routes.py:379` 经 `_save_upload_file`（同文件 149–161）落盘为 `uploads/{task_id}_end_{idx}.png`——**只校验扩展名白名单、不校验内容**，且非白名单后缀一律静默改写为 `.png`（`.heic` / `.avif` / `.tif` 会变成「后缀撒谎」的 png）；流水线 `core/pipelines/creative/steps_frames.py:222` 调 `normalize_image_async` → `utils/image_normalizer.py:83` 的 `Image.open` 抛 `UnidentifiedImageError`（`OSError` 子类）直接冒到 `multi_scene.py:108` 打死任务。对照：同模块 126 行的安全封装 `normalize_reference_path` 才吞 `OSError`，此处用的是会抛的裸版本。失败在任何视频提交之前，**未生成、未消耗配额**。**坏路径持久化在 `state.end_frame_images`，所以「重试任务」每次都读同一个坏文件 → `Retry Count: 4` 是必然，不换文件不可能通过**。字节级三种可能未定：(a) 真格式为 HEIC/AVIF/TIFF 被改名（PIL 需 `pillow-heif` 才能解，本项目未装）；(b) 文件截断/0 字节——注意前端 `CreativeForm.vue:148` 有 `f.size > 0` 过滤，0 字节理论上不该进来，若确认 0 字节说明走了别的入口或旧版本；该过滤还有个副作用：**跳过空文件但不补位，多张图时造成 idx 与场景错位**（另一潜在缺口）；(c) 落盘后被杀软/图像优化工具改写 | 按 §4.1 以**西班牙语**回复（`Idioma de la interfaz: es` 行为最强信号；报告结构字段是英文但不采信，再次印证 §4.1 陷阱）。回复口径（用户明确要求，已固化进本节 §4.2）：**只给推测 + 请用户确认，不向用户讲代码逻辑与因果推导**。实际发出三段：① 一句推测（「场景 2 上传的尾帧不是可读图片，最可能原文件本非真 PNG（HEIC/AVIF/TIFF）或截断/空文件」）+ 未消耗配额 + 「重试无效，要换文件新建任务」；② 两条即时出路（Paint 另存为真 PNG 后重建任务；或关「Fotogramas finales personalizados」改用 i2i 生成尾帧）；③ 索取确认信息（PowerShell 打印 `.Length` 与前 16 字节签名、Paint/Fotos 能否打开、图片来源与原文件名），并承诺「若文件确为完整 PNG 则是我们 bug，会修」。**本轮不改代码，等信息回来再定**。待办缺口已记录：① 上传时即校验图片可解码，报错按 UI 语言并带场景序号，不要拖到 `end_frame_gen`；② `steps_frames.py` 两处裸 `normalize_image_async` 应给可读错误（`error.image_unreadable` 类）或降级为「该场景改用 i2i 生成尾帧」+ warning，避免一个坏文件锁死整任务；③ 非白名单后缀静默改写 `.png` 应改为拒绝；④ 前端 `size > 0` 过滤造成的场景/图错位。FAQ 候选条目：「上传的尾帧/参考图报 `cannot identify image file`」 | #88 |
 | creative 任务在 `video_gen` 失败（**7.0.5** / Windows / Chrome 153），`errorMessage` 为 `[AgnesVideo] keyframes (2 frames): max retries (5) exceeded`；报告 **UI Language: en**，768×1152 / keyframes / `Retry Count: 3`；`Model call error` 1–5 是**图片**侧裸 503（`HTTP 503: server error`，12:56–13:00），6–7 是**视频提交** 503 且 body `message` 为 `No available channel for model agnes-video-v2.0 under group default (distributor)`（13:10 起），报告尾部被反馈工具截断（只到 error 7） | #80/#81/#83/#84 那条「裸 503 只享 5 次普通配额（≈5.5 分钟）」缺口的**第 5 例**，但修复**已于 2026-10-09 随 v7.1.0 发布**（`core/api/retry_policy.py`：所有 503 归忙轨、`AGNES_VIDEO_BUSY_RETRY_ATTEMPTS` 默认 15、裸 503 已有单测），用户 7.0.5 尚未包含——即本例不需再改代码，按「外部故障 + 引导升级」处理。**新信号记录**：503 的 body `message` 可以是网关「该模型无可用渠道」而非 `video_queue_full`；且同任务图片与视频**同时** 503，说明是上游整体过载/渠道不可用时段，不是视频队列单独饱和。被拒发生在入队前，未创建任务、未消耗配额 | 英文回复（UI Language: en，标注 agent）：判定上游容量故障＋未生成未消耗＋升级到 v7.1.0（`git pull && ./start.sh` / `docker pull ghcr.io/lcy362/free-short-video:7.1.0` / `npx free-short-video`）＋Retry Task 从 `video_gen` 续传（分镜与参考图保留不重提交）＋降载/换视频模型/错峰；并请升级后错峰复测——若仍持续返回 `No available channel` 即视为我们的 bug 再查（该信号与队列满不同，忙轨只能覆盖「渠道稍后恢复」；渠道长期缺失时 15 次仍会耗尽并抛通用技术报错）。回复后关闭为已答复。**本轮无代码改动**；上游新签名已补进 `docs/dev/agnes_video_upstream_behavior.md` §4 表 | #92 |
+| creative 任务在 `story` 失败（**7.1.0** / npx 部署 / Windows），`errorMessage` 为 `401 Client Error: Unauthorized for url: https://api.agnes-ai.cn/v1/chat/completions`，报告 **UI Language: en**，`Retry Count: 1`，2 次 chat 401（间隔 38s）后止 | 既有 401 同族（#38/#44/#58/#61/#62/#72/#73/#82/#86）的 **npx 变体第二例**（新用户，非 #82 复发）：请求打到国内站域名 `api.agnes-ai.cn` 被拒＝Key 与域名不匹配（国际站 Key 配国内站域名或反之；Key 过期/抄写带头尾空格）。npx 放大因素同 #82：`CONFIG_DIR` 硬编码在包目录 `.agnes_config`（npm 缓存内），`npm cache clean` 或缓存目录变化即丢配置回退默认域名；`AGNES_API_KEY` 系统环境变量优先级高于 `.env` 的老问题依旧 | 英文回复（UI Language: en，标注 agent）：401＝Key 未被所请求站点接受、story 为首步未生成未消耗；引导 Web 配置页删 Key 重加 + 「自动探测域名」绑定、自查 `GET {root}/v1/models`、排查 `AGNES_API_KEY` 环境变量、排查期只留一把 Key、npx 清缓存后重配、恢复后 Retry Task 从 `story` 续传。**CONFIG_DIR 改进（env 覆盖 / npx 用户级配置目录）继续挂待办**——本例为第二数据点，出现第三例时建议提级实施 | #93 |
+| creative 任务在 `video_gen` 失败（**7.1.0** / 本地 git 仓库部署 / Windows），`errorMessage` 为 `[AgnesVideo] keyframes (2 frames): upstream busy (HTTP 503 · model_not_found) after 15 retries / 908s; no job was created`；报告 **UI Language: en**，768×1152 / 3 场景 / keyframes，`Retry Count: 4`；`Model call error` 前段为图片侧 `Busy503 server busy`（20:41–20:42），后段全部为视频提交 503 `No available channel for model agnes-video-v2.0 under group default (distributor)`（20:45 起） | #92 的「No available channel」签名在 v7.1.0 上的**首个持续案例**：忙轨按设计跑满 15 次/908s 后抛通用技术报错，用户 4 次手动重试各开新 15 分钟窗口仍撞同墙，**持续 >1h 渠道缺失**；同任务图片侧同时 503，证实当晚上游整体容量紧张而非视频队列单独饱和。#92 回复时承诺的「持续出现即视为我们的 bug 再查」触发，但本轮按维护者决策**跳过上游探测**、按外部容量故障处理 | 英文回复（UI Language: en，标注 agent）：上游容量故障＋未生成未消耗＋设置有效＋忙轨 15 分钟按设计工作；引导错峰重试、Retry Task 从 `video_gen` 续传、降载、换视频模型（注明 2.5 Flash 为付费需余额）、多 Key；并请「不同时段仍持续 No available channel 就重开报告」，以区分当晚长故障与模型对用户分组长期不可用。**待办缺口（记录不改码）**：`model_not_found` 耗尽文案沿用通用 `upstream busy` 技术报错，未比照 `video_queue_full` 给结构化异常 + 22 语言「该模型暂无可用渠道，建议换视频模型」引导；若后续确认上游长期下架/分组限制，需评估前端明示 | #94 |
+| simple/creative 视频任务卡在 `video_gen` ~10%（**7.1.0** / Windows / 本地部署 / 国际站），两族 503 并存：`agnes-video-v2.0` → `model_not_found`（No available channel ... under group default (distributor)），`agnes-video-2.5-flash` → `video_queue_full`；**手写英文报告**（非模板），明确两问：免费视频模型是否仍对国际站 Key 可用、`video_queue_full` 反复重试是否预期 | **v2.0 已被上游网关除名（2026-10-14 实测坐实，见 `docs/dev/agnes_video_upstream_behavior.md` §4.0.2）**：`GET /v1/models` 目录无 v2.0，提交 503 `model_not_found`，维护者 `angel` 组与用户 `default` 组均复现 → 非分组、非用户配置问题，忙轨 15 次重试注定耗尽；目录新增 `agnes-video-2.5` 实测 403 付费（与 v6.2.0 release notes 一致）；`video_queue_full` 同 #47/#63 族容量问题。**应用侧 DEFAULT_VIDEO_MODEL、6 条流水线默认值、AGENTS.md / features / architecture 的「v2.0 免费」文案待适配**（用户决策：本轮仅记档，另开批次） | 英文回复（标注 agent；**口径按维护者指示从短**：2.5-flash 与收费无关，不提余额判断）：v2.0 上游已不可用、非本地配置问题（附两组复现证据）；`video_queue_full` 重试属预期——建任务前被拒、不生成不消耗；出路＝任务设置切 `agnes-video-2.5-flash` + 错峰重试（北京 22:00–01:00 / 06:00–09:00）；承诺持续跟踪免费模型是否恢复。回复后关闭为已答复 | #95 |
+
+> **口径修订注（2026-10-15，加注不删改原记录）**：本表部分历史行归因与后续实测/维护者澄清不一致，在此统一修订，原行文字保留以便追溯。
+>
+> 1. **#79 行**（2.5 Flash 提交 403 `insufficient_user_quota`）原把根因写作「2.5 Flash 为**付费模型**、需余额」。维护者 2026-10-14 明确澄清 **2.5-flash 与收费无关**（见 `docs/dev/agnes_video_upstream_behavior.md` §4.0.2），且 2026-10-14 实测 `agnes-video-2.5-flash` 提交返回 503 `video_queue_full`（非 403 付费）。故 #79 行「付费」归因**存疑待复核**（可能源于当时分组/计费口径差异）；该行「切到免费档 `agnes-video-v2.0`」的引导亦已失效——v2.0 于 2026-10-14 被上游除名，现行出路是切 `agnes-video-2.5-flash`（见 #95 行）。
+> 2. **#94 行**回复中「注明 2.5 Flash 为付费需余额」同属上述存疑口径，读者应按「2.5-flash 与收费无关」理解。
+> 3. **#35 行**（Windows `scene_prompts` 报 `[WinError 2] The system cannot find the file specified`）原标「（待确认）」并等待用户补 traceback。**注**：`scene_prompts` 步骤仅 LLM 调用、本不经 ffmpeg，与 #78 的 `tts.py` 崩溃点未必同源；但 #78 行已记 2026-09-29 收口全项目 7 处裸 `ffmpeg`/`ffprobe` 调用（含 `core/audio/tts.py` 的 `[WinError 2]` 崩溃点）。据此标注为**「疑似已随 v7.1.0 的二进制解析修复覆盖，待复现后关闭」**，非确定修复。
+
+> **A 类修复实施注（2026-10-15，加注不删改原记录）**：本表若干行原记的「待办缺口（本轮不改码）」已于 2026-10-15 批次实施，对应行原文保留以便追溯。
+>
+> 1. **#88 行**四条缺口全部落地——① 上传即校验图片可字节解码（PIL `verify()`）；② `steps_frames.py` 用户尾帧不可读改为按 UI 语言的 `error.image_unreadable_scene`（带场景序号），不再把裸 `PIL.UnidentifiedImageError` 抛到 `multi_scene.py` 打死任务；③ 非白名单后缀由「静默改写 `.png`」改为**硬拒绝**（`error.upload_ext_invalid`）；④ 前端「跳过空文件但不补位」导致的场景/图错位改为 `end_frame_indices_json` 按场景 index 映射（沿用既有 `reference_images_map` 约定）。涉及 `web/routes/task_creation_routes.py` / `core/pipelines/creative/steps_frames.py` / `core/i18n_backend.py` / `frontend/src/components/forms/CreativeForm.vue`。
+> 2. **#82 / #93 行** `CONFIG_DIR` 待办已实施——`core/config.py` 新增 `_resolve_config_dir()`，支持 `AGNES_CONFIG_DIR` 环境变量覆盖（npx 场景可指向用户级配置目录，规避 npm 缓存清空即丢配置回退默认域名）。#93 原记「出现第三例时建议提级实施」，本批提前落地。
+> 3. **#87 行**「`Style` 硬编码中文默认值泄漏到 en 界面」已收敛——后端 Form/pydantic 默认值此前已随 `5be0cfc` 改为 `""`（前端早已用语言中性英文预设预填）；本批补上 `core/screenwriter/scenes.py` 诗词风格缺省兜底改语言中性英文（原「未指定，请采用通用电影质感写实风格」→「cinematic realistic style」）。
+> 4. **#94 行** `model_not_found` 忙轨耗尽未给结构化异常 + 22 语言换模型引导的待办**仍未实施**（A2 待启动）；其相邻的「默认模型适配」（#95）已随 A1 落地，见下条。
+> 5. **#94 / #95 行**「默认模型适配」已于 2026-10-15 实施（A1）——`core/config.py DEFAULT_VIDEO_MODEL` 改为 `agnes-video-2.5-flash`、`VIDEO_MODEL_CAPABILITIES` 移除 v2.0 条目、5 条流水线默认值同步、`core/api/agnes_video.py::submit_video` 删除 width/height/num_frames 旧协议分支（恒走 2.5 提交，`_get_frame_config`/`DURATION_PRESETS` 随之删除）、`task_creation_routes` 时长校验收敛为 `VIDEO_25_DURATIONS`，AGENTS.md / `docs/public/features*` / `architecture*` / `usage.md` / `faq.md` / `regression_test_plan.md` 表述同步。竖屏躺倒维持现状（`AGNES_FIX_V25_PORTRAIT_ROTATION` 默认关、前端 `vmPortraitRotateHint` 文案未改）。
 
 ***
 

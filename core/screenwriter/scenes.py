@@ -264,7 +264,8 @@ Output ONLY the visual prompt text, no JSON, no explanation.
             dur_hint = f"各场景时长：{dur_list}（合计 {total} 秒）"
         else:
             dur_hint = f"目标总时长：{total_duration} 秒（用于把握节奏，不要求每句等长）"
-        style_hint = style.strip() if style and style.strip() else "未指定，请采用通用电影质感写实风格"
+        # issue #87：风格缺省时不再回填硬编码中文，改用语言中性的英文默认值
+        style_hint = style.strip() if style and style.strip() else "cinematic realistic style"
         system_prompt = self._prompt(
             zh_text="""你是一位诗意的视觉艺术家兼诗词分镜导演，专精将中国古典诗词转化为视频分镜。
 请将整首诗拆分为若干场景，每个场景一行，严格使用如下格式：

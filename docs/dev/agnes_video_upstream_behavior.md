@@ -1,7 +1,7 @@
 # Agnes 视频上游接口实测行为（Upstream Video API Behavior）
 
 > **文档定位**：记录 `apihub.agnes-ai.com` 视频接口**实测**的行为、错误语义与产物规格，供流水线重试策略、错误透出、回归判定与对外文档撰写时引用。本文只写「观测到的事实」，改进项见 `../plans/v7.0/upstream_error_handling_plan.md`。
-> **最近实测**：2026-09-28 上午（UTC+8），用本机 `AGNES_API_KEY` 直连上游，请求体逐字段复刻官网 `/en/demo` 前端（`video-website/components/demo/TextToVideo.tsx`）。样本量小（每档 1–2 次），标注为「单例」的结论不得当作稳定规律。
+> **最近实测**：2026-10-14 晚（UTC+8，Issue #95 排查，提交侧探针，见 §4.0.2）。上一轮全链路实测 2026-09-28 上午（UTC+8），用本机 `AGNES_API_KEY` 直连上游，请求体逐字段复刻官网 `/en/demo` 前端（`video-website/components/demo/TextToVideo.tsx`）。样本量小（每档 1–2 次），标注为「单例」的结论不得当作稳定规律。
 > **关联**：Issue #75（demo 报 "Video generation timed out"）、`docs/public/faq.md`、`docs/dev/regression_test_plan.md` F3、`docs/dev/pipeline_products.md`。
 
 ---
@@ -131,8 +131,34 @@
 > 注意忙轨只能覆盖「渠道稍后恢复」的情形：若上游长时间确实无该模型渠道，15 次重试仍会耗尽并抛通用技术报错
 > （裸 503 无队列语义，不下发 `error.video.queue_full` 文案键）。
 
+> **Issue #94（2026-10-13）为「渠道持续缺失」的首个坐实案例（7.1.0）**：503 body code 为
+> `model_not_found`（message 同 `No available channel ... under group default (distributor)`），
+> 忙轨按设计跑满 15 次/908s 后抛通用技术报错；用户 4 次手动重试各开新窗口仍同墙（持续 >1h），
+> 且同任务图片侧同时 503（`server busy`）→ 上游整体容量紧张而非视频队列单独饱和。本轮按外部故障
+> 处理未改代码；待办缺口：`model_not_found` 耗尽文案未比照 `video_queue_full` 给结构化异常 +
+> 多语言「换视频模型」引导（见 `docs/dev/issue_handling_process.md` §三 #94 行）。
+
 > 本轮（2026-10-02）按外部故障处理，仅回复用户 + 记档，未改代码。#80 与 #83 为同一用户（App 7.0.0，
 > 无 traceback），#81 为 6.4.5 且附完整 traceback，三例错误文案与路径一致（`reference` / keyframes）。
+
+### 4.0.2 `agnes-video-v2.0` 渠道下线（2026-10-14，#92/#94/#95 的 `model_not_found` 坐实为模型被除名）
+
+实测（2026-10-14 19:01–19:05 CST，国际站 `apihub.agnes-ai.com`，两把自有 Key 交叉验证）：
+
+| 探针 | 结果 |
+|------|------|
+| `GET /v1/models`（连续 4 次 + 第 2 把 Key） | 稳定返回 10 个模型，video 类仅 `agnes-video-2.5` 与 `agnes-video-2.5-flash`，**`agnes-video-v2.0` 已从目录除名**（首次查询曾返回 6 模型的过渡态，约 1 分钟内稳定为 10，疑为网关频道配置热更新） |
+| 提交 `agnes-video-v2.0`（5s / 768×1152） | 503 `model_not_found`：`No available channel for model agnes-video-v2.0 under group angel (distributor)`——本账户在 `angel` 组、#95 用户在 `default` 组，**两组同错 → 非分组问题，模型渠道被整体移除** |
+| 提交 `agnes-video-2.5`（2.5-flash 风格 payload） | 403 `insufficient_user_quota`（remaining ＄0.000000）——付费模型，与 v6.2.0 release notes「paid」一致 |
+| 提交 `agnes-video-2.5-flash`（×5，19:03–19:05 晚高峰） | 全部 503 `video_queue_full`，分钟级连发均被拒（免费队列按模型分池饱和，同 §4 既有结论） |
+
+结论与影响：
+
+- `model_not_found` 不是「渠道暂时不可用」而是 **v2.0 已被网关除名**：忙轨 15 次重试对该模型注定耗尽，用户侧任何配置（域名/分组/Key）都无法恢复。#92（default 组用户）、#94、#95 同为此签名。
+- **维护者澄清（2026-10-14）：2.5-flash 与收费无关**，用户出路＝任务设置切 2.5-flash + 错峰重试（北京 22:00–01:00 / 06:00–09:00）。#79 行「2.5-flash 为付费模型」的归因与本口径不一致，**已于 2026-10-15 在 `docs/dev/issue_handling_process.md` §三 加注修订**（标注「存疑待复核」，原记录保留不改；可能为当时分组定价差异）。
+- 项目侧待适配（本轮按用户决策仅记档，未改代码）：`core/config.py DEFAULT_VIDEO_MODEL`、6 条流水线默认 `video_model="agnes-video-v2.0"`、AGENTS.md / `docs/public/features*.md` / `docs/public/architecture*.md` 的「v2.0 免费」表述、`docs/dev/regression_test_plan.md` 中 v2.0 相关说明。
+- **A 类修复实施注（2026-10-15）**：上条「项目侧待适配」已随 A1 落地——`DEFAULT_VIDEO_MODEL` 改为 `agnes-video-2.5-flash`，5 条流水线默认同步，`VIDEO_MODEL_CAPABILITIES` 移除 v2.0 条目，`submit_video()` 删除 width/height/num_frames 旧协议分支（恒走 2.5 提交，`_get_frame_config`/`DURATION_PRESETS` 随之删除），`task_creation_routes` 时长校验收敛为 `VIDEO_25_DURATIONS`；AGENTS.md / `docs/public/features*` / `architecture*` 表述同步。竖屏躺倒维持现状（`AGNES_FIX_V25_PORTRAIT_ROTATION` 默认关）。
+
 
 ### 4.1 待实测：`video_queue_full` 是否按 Key 分池（U7，未验证）
 

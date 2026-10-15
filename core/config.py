@@ -12,13 +12,27 @@ from models.task import AudioConfig, SubtitleConfig, SubtitleStyle
 
 logger = logging.getLogger(__name__)
 
-CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".agnes_config")
+
+def _resolve_config_dir() -> str:
+    """解析配置目录（可被 ``AGNES_CONFIG_DIR`` 覆盖）。
+
+    默认：项目根目录下 ``.agnes_config``。npx 部署时该目录位于 npm 缓存内
+    （`npm cache clean` 或缓存目录变化即丢配置、回退默认域名），可用
+    ``AGNES_CONFIG_DIR`` 指向稳定的用户级目录（如 ``~/.agnes_config``）。
+    """
+    override = os.environ.get("AGNES_CONFIG_DIR", "").strip()
+    if override:
+        return os.path.abspath(os.path.expanduser(override))
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".agnes_config")
+
+
+CONFIG_DIR = _resolve_config_dir()
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 
 # ═══════════════════════════════════════════════════
 # 应用版本号（v6.1 新增：发版时同步更新，见 docs/dev/release_process.md）
 # ═══════════════════════════════════════════════════
-APP_VERSION = "7.1.0"
+APP_VERSION = "7.1.1"
 
 # 未配置 API Key 时的统一报错文案（含免费获取与在线体验兜底，全站路由共用）
 #
@@ -942,7 +956,7 @@ DURATION_FRAME_MAP = {
 # 各类型 Agnes 模型默认值（与三个 API 客户端的默认 model 对齐）
 DEFAULT_TEXT_MODEL = "agnes-3.0-flash"
 DEFAULT_IMAGE_MODEL = "agnes-image-2.5-flash"
-DEFAULT_VIDEO_MODEL = "agnes-video-v2.0"
+DEFAULT_VIDEO_MODEL = "agnes-video-2.5-flash"
 
 DEFAULT_MODELS = {
     "text": DEFAULT_TEXT_MODEL,
@@ -1165,32 +1179,6 @@ VIDEO_25_DURATIONS = [4, 5, 6, 8, 10, 12]
 
 # 视频模型能力元数据：供前端「选模型阶段」展示差异 + 按模型归拢表单选项
 VIDEO_MODEL_CAPABILITIES = {
-    DEFAULT_VIDEO_MODEL: {  # agnes-video-v2.0（免费旧版）
-        "label": "Video 2.0",
-        "price": "free",
-        "price_text": {"zh": "免费", "en": "Free"},
-        "modes": [
-            {"id": "t2v", "label": {"zh": "文生视频", "en": "Text to video"}},
-            {"id": "i2v", "label": {"zh": "图生视频（1 张参考图）", "en": "Image to video (1 ref)"}},
-            {"id": "keyframes", "label": {"zh": "关键帧动画（首尾帧）", "en": "Keyframes (first+last)"}},
-        ],
-        "durations": [5, 10, 15, 18, 20],
-        "resolution": {
-            "type": "pixels",
-            "options": [
-                {"value": "768x1152", "label": {"zh": "竖屏 768x1152", "en": "Portrait 768x1152"}},
-                {"value": "1280x720", "label": {"zh": "横屏 1280x720", "en": "Landscape 1280x720"}},
-                {"value": "1024x1024", "label": {"zh": "方形 1024x1024", "en": "Square 1024x1024"}},
-            ],
-        },
-        "supports_negative": True,
-        "max_ref_images": None,  # 不限
-        "supports_ref_video": False,
-        "desc": {
-            "zh": "免费旧版。支持任意像素分辨率、最长约 17 秒、多参考图关键帧；有负面提示词。输出分辨率由上游按标准档归一（标准档保真，非标准档会被吸附）。",
-            "en": "Free legacy model. Arbitrary pixel resolution, up to ~17s, multi-image keyframes; supports negative prompt. Output resolution is normalized by upstream to standard tiers.",
-        },
-    },
     "agnes-video-2.5": {  # 付费模型
         "label": "Video 2.5",
         "price": "paid",

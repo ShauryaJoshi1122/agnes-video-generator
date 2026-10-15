@@ -27,7 +27,7 @@ agnes-video-generator/
 │   │   ├── chat_providers.py         # Text-client factory: built-in Agnes or a custom provider
 │   │   ├── providers/                # Wire-protocol clients: base / openai-completions / anthropic-messages
 │   │   ├── agnes_image.py            # Image generation API (agnes-image-2.5-flash; 2.1 / 2.0-flash selectable)
-│   │   ├── agnes_video.py            # Video generation API (agnes-video-v2.0)
+│   │   ├── agnes_video.py            # Video generation API (agnes-video-2.5-flash)
 │   │   └── rate_limiter.py           # Dual token buckets (shared 20 × keys × 0.8/min + video-submit bucket)
 │   ├── audio/
 │   │   ├── tts.py                    # Edge TTS engine + silent fallback engine
@@ -66,7 +66,7 @@ agnes-video-generator/
 | Frontend         | Vue 3 + Vite + TypeScript + Tailwind (PostCSS) | Build output committed to `static/`; zero runtime deps for end users |
 | LLM              | Pluggable text providers                       | Built-in Agnes Chat (`agnes-3.0-flash`) by default; bring your own OpenAI-compatible / Anthropic-compatible endpoint (base URL + key) for story / script / narration |
 | Image AI         | `agnes-image-2.5-flash` (t2i / i2i)            | Free — reference images, end frames, standalone image generation     |
-| Video AI         | `agnes-video-v2.0`                             | Free — text-to-video, image-to-video, keyframes                      |
+| Video AI         | `agnes-video-2.5-flash`                        | Free — text-to-video, image reference, keyframes (4–12s, 720P)        |
 | TTS              | Edge TTS (Microsoft)                           | Free — dynamic voice catalog grouped by 22 UI languages, no extra key |
 | Subtitles        | moviepy + srt                                  | Fine-grained word-level SRT, multi-line wrapping                     |
 | Video Processing | moviepy + ffmpeg                               | Concatenation, subtitle overlay, audio mixing                        |

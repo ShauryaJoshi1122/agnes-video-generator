@@ -171,7 +171,7 @@
 3. **失败记录具体原因**：含 HTTP 状态码、错误信息、超时时长。
 4. **无明显原因须续传**：可恢复的失败通过 `--resume` 续传。
 5. **测试专用空间隔离**：回归测试使用固定独立的工作目录，与用户日常任务完全隔离（见 4.0）。
-6. **默认视频模型 = `agnes-video-2.5-flash`（v6.2.1）**：`regression_runner.py` / `scene_runner.py` 提交任务前自动将全局视频模型设为 2.5-flash（比例档位输出），可用环境变量 `AGNES_REGRESSION_VIDEO_MODEL` 覆盖为其他模型（如 `agnes-video-v2.0`）；若切换 v2.0，F3 自动回到像素校验。
+6. **默认视频模型 = `agnes-video-2.5-flash`（v6.2.1）**：`regression_runner.py` / `scene_runner.py` 提交任务前自动将全局视频模型设为 2.5-flash（比例档位输出），可用环境变量 `AGNES_REGRESSION_VIDEO_MODEL` 覆盖为其他 2.5 系列模型（如付费的 `agnes-video-2.5`）；v2.0 渠道已于 2026-10-14 下线（见 `agnes_video_upstream_behavior.md` §4.0.2），不再作为回归选项。
 
 ### 4.0 测试专用工作目录（回归空间）
 

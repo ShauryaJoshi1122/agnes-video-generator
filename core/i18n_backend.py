@@ -822,6 +822,10 @@ CATALOG: Dict[str, Dict[str, str]] = {
         "zh": "reference_images_map 必须为 JSON 数组，元素为段落 index 的整数数组",
         "en": "reference_images_map must be a JSON array whose elements are integer arrays of paragraph indices",
     },
+    "validation.end_frame_indices_not_list": {
+        "zh": "end_frame_indices_json 必须为 JSON 数组，元素为场景 index 的整数",
+        "en": "end_frame_indices_json must be a JSON array of integer scene indices",
+    },
     "validation.poem_empty": {
         "zh": "古诗原文不能为空",
         "en": "Poem text must not be empty",
@@ -1019,6 +1023,21 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "voice_compat.lang_unsupported": {
         "zh": "所选音色 {voice} 不支持「{lang_name}」语言的视频生成（仅支持：{supported}）。请更换音色或语言。",
         "en": "Voice {voice} does not support video generation in {lang_name} (supported: {supported} only). Please change the voice or the language.",
+    },
+
+    # ── 上传图片校验（issue #88）：非白名单后缀拒绝 / 字节不可解码 ──
+    # 上传时即校验，避免坏文件拖到流水线深处（end_frame_gen）才抛 PIL 原始栈打死整任务。
+    "error.upload_ext_invalid": {
+        "zh": "不支持的图片格式 {ext}（仅支持：{options}）。请更换为 PNG/JPG 等常见图片格式后重试。",
+        "en": "Unsupported image format {ext} (allowed: {options}). Please upload a common image format such as PNG or JPG, then retry.",
+    },
+    "error.image_unreadable": {
+        "zh": "上传的图片无法解码，可能不是有效的图片文件（或已被截断/损坏）。请更换为可正常打开的 PNG/JPG 图片后重试。",
+        "en": "The uploaded image could not be decoded — it may not be a valid image file (or it is truncated/corrupted). Please upload a PNG/JPG image that opens normally, then retry.",
+    },
+    "error.image_unreadable_scene": {
+        "zh": "场景 {scene_index} 上传的图片无法解码，可能不是有效的图片文件（或已被截断/损坏）。请更换为该场景的可正常打开的 PNG/JPG 图片后重试。",
+        "en": "The image uploaded for scene {scene_index} could not be decoded — it may not be a valid image file (or it is truncated/corrupted). Please replace it with a PNG/JPG image that opens normally, then retry.",
     },
 
 }

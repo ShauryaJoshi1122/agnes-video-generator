@@ -218,11 +218,22 @@ class FramesStepsMixin:
                 )
                 if os.path.exists(user_ef):
                     dest = os.path.join(scene_dir, "end_frame.png")
-                    # 优化 2：用户上传尾帧统一走归一化模块（PAD/PNG/黑边，与原 ffmpeg 语义一致）
-                    end_frame_path = await normalize_image_async(
-                        src=user_ef, width=vw, height=vh, dst=dest,
-                        strategy=PAD, fmt="PNG", background=(0, 0, 0),
-                    )
+                    # 优化 2：用户上传尾帧统一走归一化模块（PAD/PNG/黑边，与原 ffmpeg 语义一致）。
+                    # issue #88：坏文件（不可解码）应在上传时即被拒；此处再兜底一层，
+                    # 把 PIL 原始栈（UnidentifiedImageError/OSError）换成含场景序号的可读
+                    # 本地化报错，避免单个坏文件锁死整任务、且「重试」反复读同一坏文件。
+                    try:
+                        end_frame_path = await normalize_image_async(
+                            src=user_ef, width=vw, height=vh, dst=dest,
+                            strategy=PAD, fmt="PNG", background=(0, 0, 0),
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"[EndFrame] Scene {scene_idx} user end frame not decodable: {e}"
+                        )
+                        raise RuntimeError(
+                            self._t("error.image_unreadable_scene", scene_index=scene_idx + 1)
+                        ) from e
                 pregenerated[scene_idx] = end_frame_path
                 cached[str(scene_idx)] = end_frame_path
                 prev_end_frame = end_frame_path  # 维护视觉链

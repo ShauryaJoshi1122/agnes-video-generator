@@ -144,9 +144,18 @@ async function submitCreative() {
 
       if (form.refImage) fd.append('reference_image', form.refImage)
       if (form.useEndFrames) {
-        form.endFrames.forEach((f) => {
-          if (f && f.size > 0) fd.append('end_frame_images', f)
-        })
+        // 只上送非空槽位，并附带「文件 → 场景 index」映射，让后端按场景落盘，
+        // 保持「图片 ↔ 场景」索引对应（此前按顺序上送会让空槽位后的文件整体前移、
+        // 造成图场景错位，issue #88）。空文件无法作为 multipart 文件上送，故不占位。
+        const efIdx: number[] = []
+        for (let i = 0; i < form.sceneCount; i++) {
+          const f = form.endFrames[i]
+          if (f && f.size > 0) {
+            fd.append('end_frame_images', f)
+            efIdx.push(i)
+          }
+        }
+        fd.append('end_frame_indices_json', JSON.stringify(efIdx))
       }
       // v5.0 优化 5：用户上传分镜场景图（多文件，后端按上传顺序对应场景 index）
       if (form.sceneRefs.length > 0) {

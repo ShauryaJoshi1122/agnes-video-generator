@@ -117,7 +117,7 @@ class TestPoetryScenePrompts:
     def test_style_hint_fallback_default(self):
         sw = Screenwriter(api_key="", language="zh")
         _, user = sw._poetry_scene_prompts("床前明月光", scene_count=0, scene_durations=[], total_duration=30, style="")
-        assert "通用电影质感写实风格" in user
+        assert "cinematic realistic style" in user
 
     def test_style_hint_uses_provided_style(self):
         sw = Screenwriter(api_key="", language="zh")
