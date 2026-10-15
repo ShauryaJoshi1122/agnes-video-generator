@@ -118,9 +118,16 @@ def _build_manual_config(execution_mode: str, pause_points: str,
    排除 `step_build_scenes` / `step_reference_images`）；外部模式暂停点为粗粒度
    `scenes` / `references` / `videos` / `subtitle`，故 external 时补回上述两个粗粒度步骤，
    使其完成后能在 `scenes` / `references` 暂停供导入产物（manual 模式行为不变）。
-6. **前端外部模式尾帧选项**：`CreativeForm.vue` 中 `genEndFromRef` 默认 `false`；
+6. **外部模式视频步骤短路（本项目不产出分镜视频/尾帧）**：`_step_generate_videos`
+   （creative，[steps_video.py](file:///Users/lcy/video/agnes-video-generator/core/pipelines/creative/steps_video.py)）
+   与通用 `_generate_videos`（[multi_scene.py](file:///Users/lcy/video/agnes-video-generator/core/pipelines/multi_scene.py)）
+   在 `_is_external()` 为真时**直接短路**：只登记磁盘上已存在的分镜视频（`scene_{i}/video.mp4`），
+   **既不提交 Agnes 视频，也不触发 keyframes 内建的尾帧图像兜底**，随后在 `videos` 检查点暂停
+   等待用户回填。对应 PRD 检查点产物矩阵中 `videos` 的「本项目产物」为「—」。
+   2026-10-15 实测：修复前外部模式在暂停于 `videos` 之前仍以 Agnes 生成 3 张尾帧图 + 3 段视频。
+7. **前端外部模式尾帧选项**：`CreativeForm.vue` 中 `genEndFromRef` 默认 `false`；
    切换/进入 external 时取消并禁用两个尾帧复选框。
-7. **外部模式分镜提示词语言与输入原文一致**：`build_input_language_directive` 新增
+8. **外部模式分镜提示词语言与输入原文一致**：`build_input_language_directive` 新增
    `external` 参数（默认 `False` 保持既有行为）。非外部模式对非中文输入仍保留
    「场景视觉提示词用英文」约定；外部模式改为要求分镜提示词**与输入原文语言一致**
    （不翻译成英文），使交给外部工具（即梦）的分镜语言与用户输入原文一致。

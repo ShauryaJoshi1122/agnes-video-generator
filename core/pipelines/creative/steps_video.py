@@ -77,6 +77,23 @@ class VideoStepsMixin:
         Returns:
             Ordered list of video file paths.
         """
+        if self._is_external():
+            # v7.6 外部素材模式：分镜视频由外部工具（即梦）产出、经 videos 检查点
+            # 导入（PRD 检查点产物矩阵中 videos 的「本项目产物」为「—」）。
+            # 本项目在此**不生成任何素材**——既不提交 Agnes 视频，也不触发
+            # keyframes 兜底的尾帧图像生成；仅登记磁盘上已存在的分镜视频，
+            # 随后在 videos 检查点暂停等待用户回填。
+            all_video_paths = []
+            for scene_idx in range(len(scenes)):
+                video_path = os.path.join(self.working_dir, f"scene_{scene_idx}", "video.mp4")
+                if os.path.exists(video_path):
+                    all_video_paths.append(video_path)
+            logger.info(
+                "[Pipeline] Step video_gen: SKIP (external asset mode), "
+                "%d/%d scene videos on disk", len(all_video_paths), len(scenes),
+            )
+            return all_video_paths
+
         if self._state.step_video_generation == StepStatus.COMPLETED:
             logger.info("[Pipeline] Step video_gen: SKIP (already completed), reconstructing video paths from disk")
             all_video_paths = []

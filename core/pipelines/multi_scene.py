@@ -268,6 +268,23 @@ class MultiScenePipeline(BasePipeline):
         """
         scenes = self._state.scenes
 
+        if self._is_external():
+            # v7.6 外部素材模式：分镜视频由外部工具产出、经 videos 检查点导入
+            # （PRD 检查点产物矩阵中 videos 的「本项目产物」为「—」）。本项目在此
+            # **不调用 Agnes 生成视频**，仅登记磁盘上已存在的分镜视频，随后在
+            # videos 检查点暂停等待用户回填。
+            for i, scene in enumerate(scenes):
+                video_path = os.path.join(self.working_dir, f"scene_{i}", "video.mp4")
+                if os.path.exists(video_path):
+                    scene.video_file = video_path
+                    scene.video_status = StepStatus.COMPLETED
+            self.task_manager.update_state(scenes=[s.model_dump() for s in scenes])
+            logger.info(
+                "[Pipeline] Step video_gen: SKIP (external asset mode), %d scene videos on disk",
+                sum(1 for s in scenes if s.video_file),
+            )
+            return
+
         # Phase 1: 批量提交
         pending: list = []
         for i, scene in enumerate(scenes):
