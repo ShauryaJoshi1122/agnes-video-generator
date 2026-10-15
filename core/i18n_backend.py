@@ -540,6 +540,10 @@ CATALOG: Dict[str, Dict[str, str]] = {
         "zh": "角色参考图生成完成",
         "en": "Character reference image generated",
     },
+    "progress.creative_script.character_ref_external": {
+        "zh": "外部素材模式：跳过角色参考图生成",
+        "en": "External asset mode: skipping character reference generation",
+    },
     "progress.creative_script.script_running": {
         "zh": "正在编写脚本...",
         "en": "Writing the script...",
@@ -556,6 +560,10 @@ CATALOG: Dict[str, Dict[str, str]] = {
         "zh": "尾帧提示词完成，共 {n} 个",
         "en": "End-frame prompts complete, {n} total",
     },
+    "progress.creative_script.end_frame_prompts_external": {
+        "zh": "外部素材模式：跳过尾帧提示词生成",
+        "en": "External asset mode: skipping end-frame prompt generation",
+    },
     "progress.creative_frames.using_user_end_frame": {
         "zh": "场景 {i}/{total}: 使用自定义尾帧",
         "en": "Scene {i}/{total}: using your custom end frame",
@@ -571,6 +579,10 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "progress.creative_frames.end_frame_pregen_done": {
         "zh": "尾帧预生成全部完成 ({done}/{total})",
         "en": "All end frames pre-generated ({done}/{total})",
+    },
+    "progress.creative_frames.end_frame_external": {
+        "zh": "外部素材模式：跳过尾帧自动生成",
+        "en": "External asset mode: skipping end-frame generation",
     },
     "progress.creative_video.scene_submit_ti2vid": {
         "zh": "场景 {i}/{total}: 提交任务 (ti2vid)...",

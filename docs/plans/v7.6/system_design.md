@@ -109,6 +109,17 @@ def _build_manual_config(execution_mode: str, pause_points: str,
    故 `kind=image` + creative 导入时，端点除落盘 `scene_{i}/ref.png` 外，**同时登记**
    `state.scene_reference_images[pos]`（并 `tm.update_state`），使该场景以导入图为参考、
    跳过 AI 分镜图生成。其余类型（manuscript/poetry）导入图仅作参考图落盘，不改登记。
+4. **外部模式不调用 Agnes 生成素材（角色参考图 / 尾帧绑定 Agnes 图像模型）**：
+   creative 的 `_step_character_reference` / `_step_end_frame_prompts` / `_step_pregenerate_end_frames`
+   在 `_is_external()` 为真时**直接短路**（分别返回用户已有参考图 / `[]` / `{}`），
+   不再调用 Agnes 图像模型自动生成。尾帧由外部工具产出后经 `references` 检查点导入
+   （`use_custom_end_frames` / `generate_end_frames_from_ref` 复选框仅决定非外部模式的尾帧来源）。
+5. **creative 外部模式启用粗粒度检查点**：creative 默认走细粒度可暂停步骤（`_get_pausable_steps`
+   排除 `step_build_scenes` / `step_reference_images`）；外部模式暂停点为粗粒度
+   `scenes` / `references` / `videos` / `subtitle`，故 external 时补回上述两个粗粒度步骤，
+   使其完成后能在 `scenes` / `references` 暂停供导入产物（manual 模式行为不变）。
+6. **前端外部模式尾帧选项**：`CreativeForm.vue` 中 `genEndFromRef` 默认 `false`；
+   切换/进入 external 时取消并禁用两个尾帧复选框。
 
 ### 4.2 keep-audio 接线收口（P0/P2 实际落点）
 

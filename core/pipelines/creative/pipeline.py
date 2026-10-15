@@ -148,6 +148,12 @@ class CreativeVideoPipeline(
             # 用户已提供参考图 → 角色参考图直接复用，不生成新图，不暂停
             if state.reference_image:
                 steps.discard("step_character_ref")
+            # v7.6 外部素材模式：暂停点为粗粒度检查点（scenes/references/videos/subtitle），
+            # 需补回两个粗粒度合并步骤，使其完成后能在 scenes/references 暂停供导入产物。
+            mc = getattr(state, "manual_config", None)
+            if mc and getattr(mc, "execution_mode", "auto") == "external":
+                steps.add("step_build_scenes")
+                steps.add("step_reference_images")
         return steps
 
     # ------------------------------------------------------------------

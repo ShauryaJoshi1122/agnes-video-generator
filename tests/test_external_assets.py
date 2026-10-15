@@ -184,6 +184,80 @@ def test_keeps_video_audio_flag():
     assert BasePipeline._keeps_video_audio(object()) is False
 
 
+def test_is_external_flag():
+    from core.pipelines import BasePipeline
+
+    assert BasePipeline._is_external(_P(_creative_state(execution_mode="external"))) is True
+    assert BasePipeline._is_external(_P(_creative_state(execution_mode="manual"))) is False
+    assert BasePipeline._is_external(object()) is False
+
+
+# ═══════════════════════════════════════════════
+# 外部模式跳过 Agnes 素材生成（角色参考图 / 尾帧）
+# ═══════════════════════════════════════════════
+
+def _build_creative_pipeline(tmp_path, monkeypatch, mode):
+    """构造 creative 流水线（工作区指向 tmp），Agnes 图像调用置为「被调用即失败」。"""
+    monkeypatch.setenv("AGNES_REGRESSION_WORKING_DIR", str(tmp_path))
+    from core.pipelines.creative import CreativeVideoPipeline
+
+    state = CreativeVideoTask(
+        task_id="extpipe",
+        idea="x",
+        video_width=768,
+        video_height=1152,
+        scene_count=2,
+        scene_durations=[5, 5],
+        duration_source="manual",
+        audio_config=AudioConfig(enabled=False),
+        subtitle_config=SubtitleConfig(enabled=True),
+        manual_config=ManualConfig(
+            enabled=True,
+            pause_points=["videos"],
+            execution_mode=mode,
+            provider="jimeng",
+            audio_source="video",
+        ),
+    )
+    pipeline = CreativeVideoPipeline(api_key="x", task_id="extpipe", dir_name="extpipe")
+    pipeline._state = state
+    pipeline.task_manager.create(state)
+
+    async def _boom(*args, **kwargs):
+        raise AssertionError("Agnes image API must not be called in external mode")
+
+    pipeline.image_generator.generate_single_image = _boom
+    return pipeline
+
+
+@pytest.mark.asyncio
+async def test_external_mode_skips_agnes_reference_and_end_frames(tmp_path, monkeypatch):
+    """外部模式：角色参考图 / 尾帧提示词 / 尾帧图全部走短路，不调用 Agnes 图像。"""
+    pipeline = _build_creative_pipeline(tmp_path, monkeypatch, "external")
+
+    ref = await pipeline._step_character_reference("a story")
+    prompts = await pipeline._step_end_frame_prompts("a story", ["s0", "s1"])
+    end_frames = await pipeline._step_pregenerate_end_frames(["s0", "s1"], [], ref)
+
+    assert ref == ""
+    assert prompts == []
+    assert end_frames == {}
+
+
+def test_external_mode_exposes_coarse_checkpoints(tmp_path, monkeypatch):
+    """外部模式：creative 补回粗粒度步骤，使 scenes/references 检查点可暂停。"""
+    pipeline = _build_creative_pipeline(tmp_path, monkeypatch, "external")
+    steps = pipeline._get_pausable_steps()
+    assert "step_build_scenes" in steps
+    assert "step_reference_images" in steps
+
+    manual = _build_creative_pipeline(tmp_path, monkeypatch, "manual")
+    manual_steps = manual._get_pausable_steps()
+    # manual 模式仍走细粒度检查点，不受影响
+    assert "step_build_scenes" not in manual_steps
+    assert "step_reference_images" not in manual_steps
+
+
 # ═══════════════════════════════════════════════
 # 导入 / 探针端点（端到端）
 # ═══════════════════════════════════════════════

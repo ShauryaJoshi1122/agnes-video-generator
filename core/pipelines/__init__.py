@@ -402,6 +402,15 @@ class BasePipeline(ABC):
         """``translate(key, self._ui_lang(), **params)`` 的快捷方式。"""
         return translate(key, self._ui_lang(), **params)
 
+    def _is_external(self) -> bool:
+        """是否为外部素材模式（v7.6，``execution_mode == "external"``）。
+
+        该模式下画面素材由外部工具（如即梦）产出后导入，本项目**不调用 Agnes
+        图像/视频模型生成素材**（角色参考图、尾帧、分场景视频均不再自动生成）。
+        """
+        mc = getattr(getattr(self, "_state", None), "manual_config", None)
+        return bool(mc and getattr(mc, "execution_mode", "auto") == "external")
+
     def _keeps_video_audio(self) -> bool:
         """是否处于「保留视频自带音轨」的外部素材模式（v7.6）。
 
