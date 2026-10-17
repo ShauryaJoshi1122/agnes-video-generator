@@ -167,6 +167,37 @@ class TestCreativeRich:
         )
         assert resp.status_code == 422
 
+    def test_end_frame_indices_out_of_range_422(self, client, env):
+        """尾帧场景 index 必须落在 [0, _MAX_SCENE_COUNT)：越界即 422。
+
+        这是 SonarCloud S6639（Memory Allocation DoS）的回归：修复前
+        ``[999999999]`` 只过「list[int]」形态校验，随后被用来决定尾帧槽位
+        列表 ``[""] * (max + 1)`` 的分配大小，一个请求即可让进程 OOM。
+        """
+        for bad in ("[30]", "[999999999]", "[-1]", "[29,30]", '[1e9]'):
+            resp = client.post(
+                "/api/tasks/creative",
+                data={"idea": "x", "scene_count": "3", "scene_durations_json": "[5,5,5]",
+                      "use_custom_end_frames": "true", "end_frame_indices_json": bad,
+                      "audio_enabled": "false"},
+                files=[("end_frame_images", _file("e.png"))],
+            )
+            assert resp.status_code == 422, f"{bad} 应被拒绝"
+            assert "end_frame_indices_json" in resp.json()["detail"]
+
+    def test_end_frame_indices_max_index_ok(self, client, env):
+        """上界内的 index（29）仍按映射落盘。"""
+        resp = client.post(
+            "/api/tasks/creative",
+            data={"idea": "x", "scene_count": "30", "scene_durations_json": "[5,5,5]",
+                  "use_custom_end_frames": "true", "end_frame_indices_json": "[0,29]",
+                  "audio_enabled": "false"},
+            files=[("end_frame_images", _file("a.png")), ("end_frame_images", _file("b.png"))],
+        )
+        assert resp.status_code == 200
+        saved = os.listdir(env["uploads"])
+        assert any("_end_0." in f for f in saved) and any("_end_29." in f for f in saved)
+
 
 # ═══════════════════════════════════════════════
 # manuscript：逐段参考图 map

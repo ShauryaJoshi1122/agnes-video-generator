@@ -38,6 +38,9 @@ router = APIRouter(tags=["preview"])
 # 语言指令只对已知可可靠跟随的语言生效；越界直接 422。
 _CONTENT_LANG_LABELS = {"ar": "Arabic", "en": "English"}
 
+# 场景数上限：与 web/routes/task_creation_routes.py 的场景数校验同口径
+_MAX_SCENE_COUNT = 30
+
 # ── 进程内并发上限（PRD 1.1a）──
 # preview 不经 WeightedSemaphore 流水线门控，若不加防护，一个循环脚本可以在
 # 正式任务之外无限制地刷 LLM 调用。超限返回 429 + Retry-After。
@@ -204,10 +207,11 @@ async def preview_creative_script(
                 status_code=422,
                 detail=translate("validation.idea_too_long", None),
             )
-        if scene_count < 1 or scene_count > 30:
+        if scene_count < 1 or scene_count > _MAX_SCENE_COUNT:
             raise HTTPException(
                 status_code=422,
-                detail=translate("validation.scene_count_range", None, min=1, max=30),
+                detail=translate("validation.scene_count_range", None,
+                                 min=1, max=_MAX_SCENE_COUNT),
             )
         # v0.2 修订 #5：content_lang 白名单校验，越界 422，不再静默默认阿拉伯语
         if content_lang not in _CONTENT_LANG_LABELS:
