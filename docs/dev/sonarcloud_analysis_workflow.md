@@ -148,6 +148,17 @@
 > 不可信值送进 i18n 运行时的诊断日志。修复：语言标签改走静态英文表 +
 > `PROJECT_LANGUAGES` 自名表（用户输入只作查表键、不进任何 sink），删除 22 个
 > `voice_compat.label.*` 动态 key，补 6 条回归测试（commit `7461a41`）。
+>
+> **2026-10-17 修复记录**（issue #88 尾帧映射补丁引入）：门禁 `new_security_rating = 3`
+> 判红，1 个 `pythonsecurity:S6639`（Memory Allocation DoS，MAJOR）。链路：表单字段
+> `end_frame_indices_json` → `json.loads` → `max(ef_indices) + 1` →
+> `[""] * slots`（尾帧槽位列表）——该值此前只过了「list[int]」形态校验，
+> `[999999999]` 即可让进程分配约 8 GB 列表。修复思路与 §7 的 Python 引擎经验一致：
+> **自定义校验函数不被识别为净化器**，故不让用户可控值进入分配大小的构造——
+> 落盘结果先按「场景 index → 路径」收进 dict（分配量只与上传文件数有关），
+> 再物化成**长度只由常量 `_MAX_SCENE_COUNT`（30）决定**的占位列表；同时把
+> `end_frame_indices_json` 的解析收拢为 `_parse_end_frame_indices()`，与
+> `scene_count` 共用同一常量上界。补 2 条回归测试（越界 422 / 上界 29 正常落盘）。
 
 ---
 
@@ -170,6 +181,7 @@
 | Sonar 中 `web/` 覆盖率恒为 **0%** | CI `--cov` 命令漏掉 `--cov=web` | 检查 test.yml 的 pytest 命令包含 `--cov=web` |
 | `new_coverage` 不达标（< 80%） | 泄漏周期内新代码测试不足 | 补单测；可用 Sonar API 定位未覆盖文件（见下） |
 | `new_security_rating` 不达标（= C/E） | 新代码中存在 `pythonsecurity:*` 漏洞 | 先拉污点链路定位（见下），再在**数据流源头**切断用户输入 |
+| `new_security_rating = 3`，规则 `pythonsecurity:S6639`（Memory Allocation DoS） | 用户可控数值进入了 `[""] * n` / `range(n)` / `dict` 预分配等**内存分配大小**的构造 | 让分配长度只由模块级常量决定（先按 key 收进 dict 再物化），并给该数值加常量上界的解析函数；详见 §5 2026-10-17 记录 |
 | Quality Gate 无法修改 | Free 计划限制 | 只能补测试；内置门禁不可改 |
 | 非主分支数据看不到 | Free 计划仅主分支可查 | 用 GitHub check 看结果，或用 master 分支查询 |
 

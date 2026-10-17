@@ -47,6 +47,12 @@ router = APIRouter(tags=["task-creation"])
 # 上传文件允许的扩展名白名单（拒绝任意后缀，杜绝路径穿越）
 _ALLOWED_UPLOAD_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".mp4", ".mov", ".webm"}
 
+# 场景数上限（与 create_creative_task / create_poetry_task / preview_creative_script
+# 的 scene_count 校验同口径）。自定义尾帧的场景 index 是 0 基下标，合法上界为
+# ``_MAX_SCENE_COUNT - 1``；它同时是尾帧槽位列表的**唯一长度来源**——用户可控的
+# index 绝不进入任何分配大小（S6639：``[""] * max(ef_indices) + 1`` 可被
+# ``[999999999]`` 之类输入放大成 GB 级分配打死进程）。
+_MAX_SCENE_COUNT = 30
 
 def _parse_scene_durations_json(scene_durations_json: str) -> list:
     """解析场景时长 JSON 数组，非法时抛 422。"""
@@ -66,6 +72,28 @@ def _parse_scene_durations_json(scene_durations_json: str) -> list:
                 detail=translate("validation.scene_duration_range", None, scene_index=i + 1),
             )
     return scene_durations
+
+
+def _parse_end_frame_indices(end_frame_indices_json: str) -> list:
+    """解析自定义尾帧的「场景 index」列表，非法时抛 422。
+
+    除「JSON 数组 + 整数」形态校验外，还强制下界（非负）与上界
+    （``< _MAX_SCENE_COUNT``）——上界同时是调用方分配尾帧槽位列表的大小，
+    用户可控的 index 不得决定内存分配量（S6639）。
+    """
+    try:
+        ef_indices = json.loads(end_frame_indices_json) if end_frame_indices_json else []
+        if not isinstance(ef_indices, list) or not all(
+            isinstance(i, int) and not isinstance(i, bool) and 0 <= i < _MAX_SCENE_COUNT
+            for i in ef_indices
+        ):
+            raise ValueError("not a list[int] in range")
+    except Exception:
+        raise HTTPException(
+            status_code=422,
+            detail=translate("validation.end_frame_indices_not_list", None),
+        )
+    return ef_indices
 
 
 def _build_manual_config(execution_mode: str, pause_points: str) -> ManualConfig:
@@ -353,10 +381,11 @@ async def create_creative_task(
             detail=translate("validation.duration_source_invalid", None),
         )
     if duration_source == "manual":
-        if scene_count < 1 or scene_count > 30:
+        if scene_count < 1 or scene_count > _MAX_SCENE_COUNT:
             raise HTTPException(
                 status_code=422,
-                detail=translate("validation.scene_count_range", None, min=1, max=30),
+                detail=translate("validation.scene_count_range", None,
+                                 min=1, max=_MAX_SCENE_COUNT),
             )
         scene_durations = _parse_scene_durations_json(scene_durations_json)
     else:
@@ -418,28 +447,28 @@ async def create_creative_task(
     # 此处按映射落盘并**保留空串占位**，维持「图片 ↔ 场景」索引对应（此前仅按上送顺序
     # 落盘，前面的空槽位会让后续文件整体前移、图场景错位，issue #88）。
     if use_custom_end_frames and end_frame_images:
-        try:
-            ef_indices = json.loads(end_frame_indices_json) if end_frame_indices_json else []
-            if not isinstance(ef_indices, list) or not all(isinstance(i, int) for i in ef_indices):
-                raise ValueError("not a list[int]")
-        except Exception:
-            raise HTTPException(
-                status_code=422,
-                detail=translate("validation.end_frame_indices_not_list", None),
-            )
-        slots = max(ef_indices) + 1 if ef_indices else len(end_frame_images)
-        saved_paths = [""] * max(slots, 0)
+        ef_indices = _parse_end_frame_indices(end_frame_indices_json)
+        # 先按「场景 index → 路径」收集（分配量只与上传文件数有关，与 index 数值无关），
+        # 再物化成带空串占位的定长列表。**列表长度只由常量 _MAX_SCENE_COUNT 决定**：
+        # 用户可控的 scene index 绝不参与任何分配大小（S6639 修复前
+        # ``[""] * (max(ef_indices) + 1)`` 可被 ``[999999999]`` 放大成 GB 级分配）。
+        saved: dict = {}
         for pos, ef_file in enumerate(end_frame_images):
             scene_idx = ef_indices[pos] if pos < len(ef_indices) else pos
-            if scene_idx < 0 or not (ef_file and ef_file.filename):
+            if scene_idx < 0 or scene_idx >= _MAX_SCENE_COUNT or not (ef_file and ef_file.filename):
                 continue
-            saved_paths[scene_idx] = await _save_upload_file(
+            saved[scene_idx] = await _save_upload_file(
                 ef_file, upload_dir, f"{task_id}_end_{scene_idx}", scene_index=scene_idx + 1,
             )
-        if any(saved_paths):
+        if saved:
+            saved_paths = [saved.get(i, "") for i in range(_MAX_SCENE_COUNT)]
+            # 裁掉尾部空槽位，与修复前的长度语义保持一致（下游一律按 index 取用）
+            while len(saved_paths) > 1 and not saved_paths[-1]:
+                saved_paths.pop()
             state.end_frame_images = saved_paths
-            saved_count = sum(1 for p in saved_paths if p)
-            logger.info(f"[Pipeline] Saved {saved_count} custom end frame images for task {task_id}")
+            logger.info(
+                f"[Pipeline] Saved {len(saved)} custom end frame images for task {task_id}"
+            )
 
     # v5.0 优化 5：用户上传分镜场景图（按场景顺序落盘，场景数不匹配时按场景 index 对齐）
     if scene_reference_images:
@@ -649,10 +678,11 @@ async def create_poetry_task(
             detail=translate("validation.duration_source_invalid", None),
         )
     if duration_source == "manual":
-        if scene_count < 1 or scene_count > 30:
+        if scene_count < 1 or scene_count > _MAX_SCENE_COUNT:
             raise HTTPException(
                 status_code=422,
-                detail=translate("validation.scene_count_range", None, min=1, max=30),
+                detail=translate("validation.scene_count_range", None,
+                                 min=1, max=_MAX_SCENE_COUNT),
             )
         scene_durations = _parse_scene_durations_json(scene_durations_json)
     else:
