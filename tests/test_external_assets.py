@@ -105,6 +105,13 @@ def test_resolve_scene_target_mapping():
     # anchor 无逐场景目录
     assert r("anchor", "video", {}, "x.mp4", 0) == "clip/clip.mp4"
     assert r("anchor", "image", {}, "x.png", 0) == "anchor.png"
+    # 场景数上限：文件名数字越界（年份/时间戳）→ 回退上传顺序（而非 scene_2025/）
+    assert r("creative", "video", {}, "20261015.mp4", 0, 1) == os.path.join("scene_0", "video.mp4")
+    assert r("creative", "video", {}, "video_2025.mp4", 0, 1) == os.path.join("scene_0", "video.mp4")
+    # 数字落在 1..scene_count 内 → 仍按序号解析
+    assert r("creative", "video", {}, "scene_2.mp4", 0, 3) == os.path.join("scene_1", "video.mp4")
+    # 超出 scene_count → 回退上传顺序
+    assert r("creative", "video", {}, "scene_7.mp4", 0, 3) == os.path.join("scene_0", "video.mp4")
 
 
 # ═══════════════════════════════════════════════

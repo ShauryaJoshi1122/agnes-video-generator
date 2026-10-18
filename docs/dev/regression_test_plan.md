@@ -556,7 +556,7 @@ for name, color in [('test_ref.png', (100,150,200)), ('test_end.png', (200,150,1
 | ID | 条目 | 验证要点 |
 |----|------|---------|
 | X2 | 注册表 | `list_providers()` 仅 `jimeng`；`get_provider(""/"bogus")` 回退 `jimeng`；`has_capability` 四项能力为真；`checkpoint_prompts` 覆盖 scenes/references/videos/subtitle；`render_prompt` 填充 `<任务目录>` 且未定义检查点返回空串；`provider_public` 默认不含 `checkpoint_prompts` |
-| X3 | 导入映射 | `_resolve_scene_target`：文件名数字 `N` → `scene_{N-1}`；无数字（去扩展名）→ 按上传顺序；`scene_map` 显式优先；manuscript → `para_` 前缀；image → `ref.png`；anchor → `clip/clip.mp4` / `anchor.png` |
+| X3 | 导入映射 | `_resolve_scene_target`：文件名数字 `N` → `scene_{N-1}`（仅当 `1 ≤ N ≤ 场景数`；越界如年份/时间戳 `20261015.mp4` → 回退上传顺序，不再落到 `scene_2025/`）；无数字（去扩展名）→ 按上传顺序；`scene_map` 显式优先；manuscript → `para_` 前缀；image → `ref.png`；anchor → `clip/clip.mp4` / `anchor.png` |
 | X4 | 归一化 + 探针 | `normalize_external_video` 输出目标分辨率（768×1152）、h264、含 fps；无音轨片段不补静音；`probe_media` 文件缺失时 `duration=0.0`/`has_audio=False`；`normalize_external_image` 输出目标尺寸 PNG |
 | X5 | keep-audio 判定 | `BasePipeline._keeps_video_audio`：`external` + `audio_source=video` → True；`project` / `manual` → False；无 `_state` 替身不抛异常 |
 

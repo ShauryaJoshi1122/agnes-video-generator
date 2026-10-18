@@ -622,14 +622,16 @@ def _first_number(text: str) -> Optional[int]:
 
 
 def _resolve_scene_target(
-    task_type: str, kind: str, mapping: dict, filename: str, pos: int
+    task_type: str, kind: str, mapping: dict, filename: str, pos: int, scene_count: int = 0
 ) -> str:
     """把上传文件解析为任务目录下的目标相对路径（v7.6 外部素材导入）。
 
     优先级：
       1. ``scene_map`` 显式指定（值形如 ``scene_2`` / ``para_1``）；
       2. 文件名（去扩展名）首个数字 N → ``{prefix}_{N-1}``
-         （即梦常导出 scene_1.mp4 表示第 1 段）；
+         （即梦常导出 scene_1.mp4 表示第 1 段）；仅当 ``1 ≤ N ≤ scene_count`` 时才采用
+         （``scene_count`` ≤ 0 时不限），避免把文件名里的年份/时间戳（如
+         ``20261015.mp4`` → 2026）误当场景序号而落到 ``scene_2025/``；
       3. 兜底按上传顺序 → ``{prefix}_{pos}``。
 
     ``video`` → ``{dir}/video.mp4``；``image`` → ``{dir}/ref.png``。
@@ -640,6 +642,8 @@ def _resolve_scene_target(
 
     stem = os.path.splitext(filename)[0]
     num = _first_number(stem)
+    if num is not None and scene_count > 0 and not (1 <= num <= scene_count):
+        num = None
     prefix = "para" if task_type in _PARA_PREFIX_TASKS else "scene"
     scene_dir = ""
     if mapping:
@@ -700,6 +704,9 @@ async def import_task_artifacts(
     task_type = str(getattr(state.task_type, "value", state.task_type))
     width = int(getattr(state, "video_width", 0) or 0)
     height = int(getattr(state, "video_height", 0) or 0)
+    scene_count = int(getattr(state, "scene_count", 0) or 0) or len(
+        getattr(state, "scenes", None) or []
+    )
     real_task_dir = os.path.realpath(tm.task_dir)
 
     results: list[dict] = []
@@ -710,7 +717,7 @@ async def import_task_artifacts(
         filename = os.path.basename(upload.filename or f"upload_{pos}")
         entry: dict = {"filename": filename, "target": "", "ok": False, "error": "", "probe": None}
         try:
-            relpath = _resolve_scene_target(task_type, kind, mapping, filename, pos)
+            relpath = _resolve_scene_target(task_type, kind, mapping, filename, pos, scene_count)
             abs_path = os.path.realpath(os.path.join(tm.task_dir, relpath))
             if not abs_path.startswith(real_task_dir + os.sep):
                 raise ValueError("Access denied")
@@ -871,7 +878,7 @@ async def approve_checkpoint(task_id: str, checkpoint: str,
         return {"ok": True, "checkpoint": checkpoint, "confirmed": False, **plan.to_dict()}
 
     # ── 确认落盘 ──
-    # v7.6 外部素材模式：确认 videos 检查点前先校验素材已导入（缺失/无音轨 → 422）
+    # v7.6 外部素材模式：确认 videos 检查点前先校验素材已导入（缺失 → 422）
     if checkpoint == "videos":
         _validate_external_videos(state)
 
