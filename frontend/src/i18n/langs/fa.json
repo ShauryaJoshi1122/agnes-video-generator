@@ -750,7 +750,6 @@
   "checkpoint.import.select": "انتخاب فایل‌ها",
   "checkpoint.import.kind": "نوع خروجی",
   "checkpoint.import.done": "ورود کامل شد",
-  "checkpoint.import.no_audio": "این کلیپ مسیر صوتی ندارد، لطفاً دوباره خروجی بگیرید",
   "checkpoint.probe.duration": "مدت",
   "checkpoint.probe.resolution": "رزولوشن",
   "checkpoint.probe.fps": "نرخ فریم",

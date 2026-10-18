@@ -750,7 +750,6 @@
   "checkpoint.import.select": "फ़ाइलें चुनें",
   "checkpoint.import.kind": "आर्टिफ़ैक्ट प्रकार",
   "checkpoint.import.done": "आयात पूर्ण",
-  "checkpoint.import.no_audio": "इस क्लिप में ऑडियो ट्रैक नहीं है, कृपया दोबारा निर्यात करें",
   "checkpoint.probe.duration": "अवधि",
   "checkpoint.probe.resolution": "रिज़ॉल्यूशन",
   "checkpoint.probe.fps": "FPS",

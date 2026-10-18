@@ -750,7 +750,6 @@
   "checkpoint.import.select": "ファイルを選択",
   "checkpoint.import.kind": "成果物の種類",
   "checkpoint.import.done": "インポート完了",
-  "checkpoint.import.no_audio": "このクリップには音声トラックがありません。再エクスポートしてください",
   "checkpoint.probe.duration": "長さ",
   "checkpoint.probe.resolution": "解像度",
   "checkpoint.probe.fps": "フレームレート",

@@ -750,7 +750,6 @@
   "checkpoint.import.select": "Pilih file",
   "checkpoint.import.kind": "Jenis artefak",
   "checkpoint.import.done": "Impor selesai",
-  "checkpoint.import.no_audio": "Klip ini tidak memiliki trek audio, silakan ekspor ulang",
   "checkpoint.probe.duration": "Durasi",
   "checkpoint.probe.resolution": "Resolusi",
   "checkpoint.probe.fps": "FPS",

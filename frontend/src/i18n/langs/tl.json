@@ -750,7 +750,6 @@
   "checkpoint.import.select": "Pumili ng mga file",
   "checkpoint.import.kind": "Uri ng artifact",
   "checkpoint.import.done": "Kumpleto ang pag-import",
-  "checkpoint.import.no_audio": "Walang audio track ang clip na ito, i-export muli",
   "checkpoint.probe.duration": "Tagal",
   "checkpoint.probe.resolution": "Resolution",
   "checkpoint.probe.fps": "FPS",

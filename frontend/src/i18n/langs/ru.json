@@ -750,7 +750,6 @@
   "checkpoint.import.select": "Выбрать файлы",
   "checkpoint.import.kind": "Тип артефакта",
   "checkpoint.import.done": "Импорт завершён",
-  "checkpoint.import.no_audio": "В этом клипе нет звуковой дорожки, экспортируйте заново",
   "checkpoint.probe.duration": "Длительность",
   "checkpoint.probe.resolution": "Разрешение",
   "checkpoint.probe.fps": "Частота кадров",

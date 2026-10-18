@@ -750,7 +750,6 @@
   "checkpoint.import.select": "Escolher arquivos",
   "checkpoint.import.kind": "Tipo de artefato",
   "checkpoint.import.done": "Importação concluída",
-  "checkpoint.import.no_audio": "Este clipe não tem faixa de áudio, exporte novamente",
   "checkpoint.probe.duration": "Duração",
   "checkpoint.probe.resolution": "Resolução",
   "checkpoint.probe.fps": "FPS",

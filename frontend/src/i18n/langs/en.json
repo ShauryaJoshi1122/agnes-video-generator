@@ -320,7 +320,6 @@
   "checkpoint.import.select": "Choose files",
   "checkpoint.import.kind": "Artifact type",
   "checkpoint.import.done": "Import complete",
-  "checkpoint.import.no_audio": "This clip has no audio track, please re-export",
   "checkpoint.probe.duration": "Duration",
   "checkpoint.probe.resolution": "Resolution",
   "checkpoint.probe.fps": "FPS",

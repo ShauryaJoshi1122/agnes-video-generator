@@ -750,7 +750,6 @@
   "checkpoint.import.select": "Bestanden kiezen",
   "checkpoint.import.kind": "Type artefact",
   "checkpoint.import.done": "Import voltooid",
-  "checkpoint.import.no_audio": "Deze clip heeft geen audiotrack, exporteer opnieuw",
   "checkpoint.probe.duration": "Duur",
   "checkpoint.probe.resolution": "Resolutie",
   "checkpoint.probe.fps": "FPS",

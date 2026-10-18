@@ -750,7 +750,6 @@
   "checkpoint.import.select": "ফাইল নির্বাচন করুন",
   "checkpoint.import.kind": "আউটপুটের ধরন",
   "checkpoint.import.done": "আমদানি সম্পন্ন",
-  "checkpoint.import.no_audio": "এই ক্লিপে অডিও ট্র্যাক নেই, অনুগ্রহ করে আবার রপ্তানি করুন",
   "checkpoint.probe.duration": "সময়কাল",
   "checkpoint.probe.resolution": "রেজোলিউশন",
   "checkpoint.probe.fps": "FPS",

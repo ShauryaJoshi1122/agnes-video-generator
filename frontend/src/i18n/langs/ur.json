@@ -750,7 +750,6 @@
   "checkpoint.import.select": "فائلیں منتخب کریں",
   "checkpoint.import.kind": "آرٹیفیکٹ کی قسم",
   "checkpoint.import.done": "درآمد مکمل",
-  "checkpoint.import.no_audio": "اس کلپ میں آڈیو ٹریک نہیں ہے، براہ کرم دوبارہ ایکسپورٹ کریں",
   "checkpoint.probe.duration": "دورانیہ",
   "checkpoint.probe.resolution": "ریزولوشن",
   "checkpoint.probe.fps": "FPS",

@@ -750,7 +750,6 @@
   "checkpoint.import.select": "Dateien auswählen",
   "checkpoint.import.kind": "Artefakttyp",
   "checkpoint.import.done": "Import abgeschlossen",
-  "checkpoint.import.no_audio": "Dieser Clip hat keine Audiospur, bitte erneut exportieren",
   "checkpoint.probe.duration": "Dauer",
   "checkpoint.probe.resolution": "Auflösung",
   "checkpoint.probe.fps": "FPS",

@@ -750,7 +750,6 @@
   "checkpoint.import.select": "Dosyaları seç",
   "checkpoint.import.kind": "Öğe türü",
   "checkpoint.import.done": "İçe aktarma tamamlandı",
-  "checkpoint.import.no_audio": "Bu klipte ses parçası yok, lütfen yeniden dışa aktarın",
   "checkpoint.probe.duration": "Süre",
   "checkpoint.probe.resolution": "Çözünürlük",
   "checkpoint.probe.fps": "FPS",

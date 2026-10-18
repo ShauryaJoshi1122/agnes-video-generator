@@ -750,7 +750,6 @@
   "checkpoint.import.select": "اختيار الملفات",
   "checkpoint.import.kind": "نوع المخرجات",
   "checkpoint.import.done": "اكتمل الاستيراد",
-  "checkpoint.import.no_audio": "لا يحتوي هذا المقطع على مسار صوتي، يرجى إعادة التصدير",
   "checkpoint.probe.duration": "المدة",
   "checkpoint.probe.resolution": "الدقة",
   "checkpoint.probe.fps": "معدل الإطارات",

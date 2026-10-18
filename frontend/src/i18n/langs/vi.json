@@ -750,7 +750,6 @@
   "checkpoint.import.select": "Chọn tệp",
   "checkpoint.import.kind": "Loại tài nguyên",
   "checkpoint.import.done": "Nhập hoàn tất",
-  "checkpoint.import.no_audio": "Clip này không có track âm thanh, vui lòng xuất lại",
   "checkpoint.probe.duration": "Thời lượng",
   "checkpoint.probe.resolution": "Độ phân giải",
   "checkpoint.probe.fps": "FPS",

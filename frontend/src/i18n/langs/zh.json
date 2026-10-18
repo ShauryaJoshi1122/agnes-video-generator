@@ -564,7 +564,6 @@
   "checkpoint.import.select": "选择文件",
   "checkpoint.import.kind": "产物类型",
   "checkpoint.import.done": "导入完成",
-  "checkpoint.import.no_audio": "该片段没有音轨，请重新导出",
   "checkpoint.probe.duration": "时长",
   "checkpoint.probe.resolution": "分辨率",
   "checkpoint.probe.fps": "帧率",

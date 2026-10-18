@@ -104,11 +104,6 @@ async function onImportFiles(e: Event) {
   }
 }
 
-// 无音轨片段（外部素材模式下应带原生音频，缺音轨需醒目提示）
-function probeNoAudio(r: any): boolean {
-  return r?.probe?.has_audio === false
-}
-
 // ── 通道 1：AI 帮我改（文本 / 图片产物；视频/音频不支持）──
 const aiSupportedCategories = ['text', 'json', 'subtitle']
 const aiImageExts = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp']
@@ -525,7 +520,7 @@ function artLabel(a: any): string {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(r, i) in importResults" :key="i" class="border-t border-rule/30" :class="probeNoAudio(r) ? 'text-amber-400' : 'text-ink-2'">
+              <tr v-for="(r, i) in importResults" :key="i" class="border-t border-rule/30 text-ink-2">
                 <td class="px-2 py-1 break-all">
                   {{ r.file }}
                   <span v-if="r.scene" class="text-[10px] text-muted"> → {{ r.scene }}</span>
@@ -539,7 +534,6 @@ function artLabel(a: any): string {
             </tbody>
           </table>
         </div>
-        <p v-if="importResults.some(probeNoAudio)" class="text-xs text-amber-400">⚠️ {{ t('checkpoint.import.no_audio') }}</p>
       </div>
     </div>
 

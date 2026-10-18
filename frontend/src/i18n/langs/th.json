@@ -750,7 +750,6 @@
   "checkpoint.import.select": "เลือกไฟล์",
   "checkpoint.import.kind": "ประเภทของชิ้นงาน",
   "checkpoint.import.done": "นำเข้าเสร็จสิ้น",
-  "checkpoint.import.no_audio": "คลิปนี้ไม่มีแทร็กเสียง โปรดส่งออกใหม่",
   "checkpoint.probe.duration": "ความยาว",
   "checkpoint.probe.resolution": "ความละเอียด",
   "checkpoint.probe.fps": "เฟรมต่อวินาที",

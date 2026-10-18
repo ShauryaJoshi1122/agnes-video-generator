@@ -750,7 +750,6 @@
   "checkpoint.import.select": "파일 선택",
   "checkpoint.import.kind": "산출물 유형",
   "checkpoint.import.done": "가져오기 완료",
-  "checkpoint.import.no_audio": "이 클립에는 오디오 트랙이 없습니다. 다시 내보내 주세요",
   "checkpoint.probe.duration": "길이",
   "checkpoint.probe.resolution": "해상도",
   "checkpoint.probe.fps": "프레임 레이트",
