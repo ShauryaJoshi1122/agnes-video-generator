@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # 二进制名 → 覆盖环境变量名
 _EXE_OVERRIDE = {"ffmpeg": "FFMPEG_BINARY", "ffprobe": "FFPROBE_BINARY"}
 _cache: "dict[str, str | None]" = {}
+_libass_cache: "dict[str, bool]" = {}
 
 
 def resolve_binary(name: str) -> "str | None":
@@ -208,9 +209,11 @@ def _resolve(name: str) -> "str | None":
         logger.info(f"[Compositor] {name}: explicit {override}")
         return override
 
-    # 2) 系统 PATH
+    # 2) 系统 PATH——但要求具备 libass（subtitles/ass 滤镜）。
+    # 部分系统构建（如 Homebrew ffmpeg 8.x 默认配方）不带 libass，烧字幕会
+    # 全部失败并静默降级为「丢字幕」。此时改用内置静态二进制（自带 libass）。
     found = shutil.which(name)
-    if found:
+    if found and (name != "ffmpeg" or _has_libass(found)):
         logger.info(f"[Compositor] {name}: system {found}")
         return found
 
@@ -226,6 +229,33 @@ def _resolve(name: str) -> "str | None":
 
     logger.warning(f"[Compositor] {name}: not found (no system PATH nor builtin)")
     return None
+
+
+def _has_libass(ffmpeg_path: str) -> bool:
+    """检测 ffmpeg 构建是否包含 libass 字幕滤镜（subtitles/ass）。
+
+    结果按路径缓存（构建能力不会在进程生命周期内变化）。检测失败按
+    「具备」处理（保守：不因探测异常而额外换二进制）。
+    """
+    cached = _libass_cache.get(ffmpeg_path)
+    if cached is not None:
+        return cached
+    ok = True
+    try:
+        r = subprocess.run(
+            [ffmpeg_path, "-hide_banner", "-filters"],
+            stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=15,
+        )
+        ok = "subtitles" in (r.stdout or "")
+    except Exception as e:
+        logger.warning(f"[Compositor] libass capability probe failed: {e}")
+    if not ok:
+        logger.warning(
+            f"[Compositor] {ffmpeg_path} has no libass (subtitles filter); "
+            "falling back to builtin ffmpeg for subtitle burning"
+        )
+    _libass_cache[ffmpeg_path] = ok
+    return ok
 
 
 def _resolve_builtin_ffmpeg() -> "str | None":
