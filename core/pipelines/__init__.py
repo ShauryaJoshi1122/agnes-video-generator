@@ -335,6 +335,20 @@ class BasePipeline(ABC):
         checkpoint = _STEP_TO_CHECKPOINT.get(step_name)
         if not checkpoint:
             return False
+
+        # v7.6 外部素材模式：音频来源=视频（保留视频自带音轨、不生成 TTS）
+        # → audio 检查点无产物可确认，自动通过。
+        if (
+            checkpoint == CHECKPOINT_AUDIO
+            and getattr(mc, "execution_mode", "auto") == "external"
+            and getattr(mc, "audio_source", "project") == "video"
+        ):
+            logger.info(
+                "[Pipeline] Task %s external mode keeps video audio, "
+                "audio checkpoint auto-passed", self.task_id,
+            )
+            return False
+
         if checkpoint not in mc.pause_points:
             return False
         if checkpoint in mc.approved_checkpoints:
@@ -387,6 +401,68 @@ class BasePipeline(ABC):
     def _t(self, key: str, **params) -> str:
         """``translate(key, self._ui_lang(), **params)`` 的快捷方式。"""
         return translate(key, self._ui_lang(), **params)
+
+    def _is_external(self) -> bool:
+        """是否为外部素材模式（v7.6，``execution_mode == "external"``）。
+
+        该模式下画面素材由外部工具（如即梦）产出后导入，本项目**不调用 Agnes
+        图像/视频模型生成素材**（角色参考图、尾帧、分场景视频均不再自动生成）。
+        """
+        mc = getattr(getattr(self, "_state", None), "manual_config", None)
+        return bool(mc and getattr(mc, "execution_mode", "auto") == "external")
+
+    def _keeps_video_audio(self) -> bool:
+        """是否处于「保留视频自带音轨」的外部素材模式（v7.6）。
+
+        该模式（``execution_mode == "external`` 且 ``audio_source == "video"``）下
+        不再生成/采集本项目 TTS 音频或词级 cues，字幕时间轴改按**各场景视频真实时长**
+        对齐（见 :meth:`resolve_segment_durations`）。
+        """
+        mc = getattr(getattr(self, "_state", None), "manual_config", None)
+        return bool(
+            mc
+            and getattr(mc, "execution_mode", "auto") == "external"
+            and getattr(mc, "audio_source", "project") == "video"
+        )
+
+    def _use_dialogue_subtitles(self) -> bool:
+        """字幕是否取「人物对白」而非旁白（v7.6 外部素材模式）。
+
+        仅当 ``execution_mode == "external"`` 且 ``subtitle_source == "dialogue"``
+        时为真；此时字幕文本来源切换为各场景 ``dialogue``（空则回退旁白），
+        音频/TTS 仍走旁白（字幕来源与音频来源相互独立）。
+        """
+        mc = getattr(getattr(self, "_state", None), "manual_config", None)
+        return bool(
+            mc
+            and getattr(mc, "execution_mode", "auto") == "external"
+            and getattr(mc, "subtitle_source", "narration") == "dialogue"
+        )
+
+    def resolve_segment_durations(self, video_paths: list, fallback: list) -> list:
+        """解析字幕分段时长（v7.6）：外部素材模式用视频真实时长，否则用计划时长。
+
+        Args:
+            video_paths: 各分段视频文件路径（按展示顺序）。
+            fallback: 各分段计划时长（秒），探测失败时逐项回退。
+
+        Returns:
+            与 ``video_paths`` 等长的时长列表（秒）。
+        """
+        if not self._keeps_video_audio():
+            return [float(d) for d in fallback]
+        from core.compositor.ffmpeg_tool import probe_duration
+
+        durations: list = []
+        for i, path in enumerate(video_paths):
+            base = float(fallback[i]) if i < len(fallback) else 5.0
+            d = probe_duration(path, 0.0) if path else 0.0
+            durations.append(float(d) if d and d > 0 else base)
+        logger.info(
+            "[Pipeline] External keep-audio: subtitle durations from real videos = %s",
+            durations,
+        )
+        return durations
 
     def _submit_progress_callback(self, step: str, progress: float):
         """U1（v7.0）：提交侧进度回调，供 ``AgnesVideoAPI.submit_video`` 使用。
@@ -721,6 +797,9 @@ class BasePipeline(ABC):
         Returns:
             cues 兼容对象（含 ``.cues``）；不需要或失败时返回 None。
         """
+        # v7.6 外部素材模式：字幕按视频真实时长对齐，不恢复 TTS cues。
+        if self._keeps_video_audio():
+            return None
         if not narration_text:
             return None
         use_cue = getattr(subtitle_config, "use_cue_timeline", True)
@@ -785,6 +864,8 @@ class BasePipeline(ABC):
         五处复制的"EdgeTTS → Silent 降级 + harvest_cues"逻辑（v5.0 Batch 2）。
 
         行为矩阵：
+            0. 外部素材模式保留视频自带音轨（:meth:`_keeps_video_audio`）：直接返回
+               None，不落盘、不调用 EdgeTTS、不采集 cues（本项目不产出任何音频）。
             1. text 为空：empty_placeholder="" → 跳过返回 None（不落盘）；
                非空 → 以占位文本直接走 Silent 落盘（不调用 EdgeTTS）。
             2. audio_config.enabled → EdgeTTSEngine.generate：
@@ -806,6 +887,16 @@ class BasePipeline(ABC):
         Returns:
             SubMaker cues 对象（有 cues 可用时）；否则 None。
         """
+        # v7.6 外部素材模式（保留视频自带音轨）：本项目**完全不产出音频** ——
+        # 不写 combined_narration.mp3、不调用 edge_tts、不采集 cues；字幕改按
+        # 各场景视频真实时长对齐（见 :meth:`resolve_segment_durations`）。
+        if self._keeps_video_audio():
+            logger.info(
+                "[Audio] external keep-audio mode: skip project audio generation: %s",
+                output_path,
+            )
+            return None
+
         from core.audio.tts import EdgeTTSEngine, SilentTTSEngine
 
         audio_enabled = bool(getattr(audio_config, "enabled", True))

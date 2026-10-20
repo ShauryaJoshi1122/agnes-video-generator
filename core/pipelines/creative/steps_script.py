@@ -317,6 +317,27 @@ class ScriptStepsMixin:
                 return ref_path
             logger.warning("[Pipeline] Step character_ref: marked completed but file missing, re-running")
 
+        # v7.6 外部素材模式：角色参考图生成绑定 Agnes 图像模型；使用外部工具（即梦）时
+        # 不调用 Agnes，仅复用用户已提供的参考图（无则留空，由 references 检查点导入）。
+        if self._is_external():
+            ref_path = self._state.reference_image or ""
+            self._state.step_character_ref = StepStatus.COMPLETED
+            self._state.character_ref_file = ref_path
+            self.task_manager.update_state(
+                step_character_ref=StepStatus.COMPLETED,
+                character_ref_file=ref_path,
+            )
+            logger.info("[Pipeline] Step character_ref: SKIP (external asset mode)")
+            await self._emit(
+                "character_ref", "completed",
+                self._t(
+                    "progress.creative_script.character_ref_user_image"
+                    if ref_path else "progress.creative_script.character_ref_external"
+                ),
+                _PROGRESS_CHARACTER_REF_DONE,
+            )
+            return ref_path
+
         if self._state.reference_image:
             logger.info("[Pipeline] Step character_ref: SKIP (user-provided reference image)")
             self._state.step_character_ref = StepStatus.COMPLETED
@@ -430,6 +451,21 @@ class ScriptStepsMixin:
                 if i < len(durations):
                     scene_obj.duration = durations[i]
 
+        # v7.6 外部素材模式 · 对白字幕来源：为每个场景生成人物对白，落 scenes[].dialogue
+        if self._use_dialogue_subtitles():
+            dialogues = await asyncio.to_thread(
+                self.screenwriter.write_dialogues, story, scenes,
+                self._style_with_language_directive(),
+            )
+            for i, scene_obj in enumerate(self._state.scenes):
+                if i < len(dialogues):
+                    scene_obj.dialogue = dialogues[i]
+            logger.info(
+                "[Pipeline] Dialogue subtitles: %d/%d scenes have dialogue",
+                sum(1 for s in self._state.scenes if s.dialogue),
+                len(self._state.scenes),
+            )
+
         self._state.scene_durations = durations
         logger.info(
             f"[Pipeline] Script: {len(scenes)} scenes, "
@@ -463,6 +499,18 @@ class ScriptStepsMixin:
             keyframes mode.
         """
         if self._state.chaining_mode != "keyframes":
+            return []
+
+        # v7.6 外部素材模式：尾帧提示词仅用于 Agnes 生成尾帧；外部工具产出尾帧时不生成。
+        if self._is_external():
+            logger.info("[Pipeline] Step end_frame_prompts: SKIP (external asset mode)")
+            self._state.step_end_frame_prompts = StepStatus.COMPLETED
+            self.task_manager.update_state(step_end_frame_prompts=StepStatus.COMPLETED)
+            await self._emit(
+                "end_frame_prompts", "completed",
+                self._t("progress.creative_script.end_frame_prompts_external"),
+                _PROGRESS_END_FRAME_PROMPTS_DONE,
+            )
             return []
 
         if self._state.step_end_frame_prompts == StepStatus.COMPLETED:

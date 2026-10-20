@@ -268,6 +268,23 @@ class MultiScenePipeline(BasePipeline):
         """
         scenes = self._state.scenes
 
+        if self._is_external():
+            # v7.6 外部素材模式：分镜视频由外部工具产出、经 videos 检查点导入
+            # （PRD 检查点产物矩阵中 videos 的「本项目产物」为「—」）。本项目在此
+            # **不调用 Agnes 生成视频**，仅登记磁盘上已存在的分镜视频，随后在
+            # videos 检查点暂停等待用户回填。
+            for i, scene in enumerate(scenes):
+                video_path = os.path.join(self.working_dir, f"scene_{i}", "video.mp4")
+                if os.path.exists(video_path):
+                    scene.video_file = video_path
+                    scene.video_status = StepStatus.COMPLETED
+            self.task_manager.update_state(scenes=[s.model_dump() for s in scenes])
+            logger.info(
+                "[Pipeline] Step video_gen: SKIP (external asset mode), %d scene videos on disk",
+                sum(1 for s in scenes if s.video_file),
+            )
+            return
+
         # Phase 1: 批量提交
         pending: list = []
         for i, scene in enumerate(scenes):
@@ -447,11 +464,21 @@ class MultiScenePipeline(BasePipeline):
         )
 
     def _get_segment_texts_and_durations(self) -> tuple:
-        """字幕分段文本与时长。默认取各场景 narration_text + duration。"""
-        texts = [s.narration_text for s in self._state.scenes if s.narration_text] \
-            or [""]
-        durs = [float(s.duration) for s in self._state.scenes if s.narration_text] \
-            or [5.0]
+        """字幕分段文本与时长。默认取各场景 narration_text + duration。
+
+        v7.6 外部素材模式 · 对白字幕来源（``subtitle_source == "dialogue"``）时
+        改取各场景 ``dialogue``（空则回退该场景旁白）；无对白来源时即回退旁白。
+        """
+        use_dialogue = self._use_dialogue_subtitles()
+
+        def _text_of(scene) -> str:
+            if use_dialogue:
+                return getattr(scene, "dialogue", "") or scene.narration_text
+            return scene.narration_text
+
+        pairs = [(s, _text_of(s)) for s in self._state.scenes]
+        texts = [t for _s, t in pairs if t] or [""]
+        durs = [float(s.duration) for s, t in pairs if t] or [5.0]
         return texts, durs
 
     def _get_audio_path(self) -> str:

@@ -37,8 +37,16 @@ export const appState = reactive({
   voiceCatalog: null as VoiceCatalog | null,
   voiceIndex: {} as Record<string, any>,
   // v6.0 手动模式：创建时的执行模式与暂停点（写入表单提交）
-  execMode: 'auto' as 'auto' | 'manual',
+  // v7.6 外部素材模式：execMode 增加第三值 'external'
+  execMode: 'auto' as 'auto' | 'manual' | 'external',
   pausePoints: [] as string[],
+  // v7.6 外部素材模式：可选外部工具列表（GET /api/providers）与当前所选
+  providers: [] as any[],
+  providerSelected: '' as string,
+  // v7.6 外部素材模式：音频来源（video=用视频自带音频 / project=本项目配音）
+  externalAudioSource: 'video' as 'video' | 'project',
+  // v7.6 外部素材模式：字幕来源（narration=旁白 / dialogue=人物对白）
+  externalSubtitleSource: 'narration' as 'narration' | 'dialogue',
 })
 
 // 折叠偏好

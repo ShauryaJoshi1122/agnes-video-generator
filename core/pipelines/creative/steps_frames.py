@@ -163,6 +163,23 @@ class FramesStepsMixin:
         if self._state.chaining_mode != "keyframes":
             return {}
 
+        # v7.6 外部素材模式：尾帧由外部工具（即梦）产出后经 references 检查点导入，
+        # 本项目不调用 Agnes 图像模型自动生成尾帧。
+        if self._is_external():
+            logger.info("[Pipeline] Step end_frame_gen: SKIP (external asset mode)")
+            self._state.step_end_frame_generation = StepStatus.COMPLETED
+            self._state.pregenerated_end_frames = {}
+            self.task_manager.update_state(
+                step_end_frame_generation=StepStatus.COMPLETED,
+                pregenerated_end_frames={},
+            )
+            await self._emit(
+                "end_frame_gen", "completed",
+                self._t("progress.creative_frames.end_frame_external"),
+                _PROGRESS_END_FRAME_PREGEN_DONE,
+            )
+            return {}
+
         if self._state.step_end_frame_generation == StepStatus.COMPLETED:
             cached_frames = self._state.pregenerated_end_frames or {}
             # 验证缓存的文件是否实际存在（防止标记 completed 但文件丢失）

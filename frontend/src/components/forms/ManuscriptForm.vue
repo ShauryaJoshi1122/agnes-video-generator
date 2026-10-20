@@ -42,9 +42,14 @@ async function submitManuscript() {
       const sc = subtitleRef.value
       collectAudioSubtitleFields(fd, sc, voiceSelections, 'm')
 
-      // v6.0 手动模式：执行模式 + 暂停点
+      // v6.0 手动模式 / v7.6 外部素材模式：执行模式 + 暂停点 + 工具与音频来源
       fd.append('execution_mode', appState.execMode)
-      fd.append('pause_points', JSON.stringify(appState.execMode === 'manual' ? appState.pausePoints : []))
+      fd.append('pause_points', JSON.stringify(appState.execMode !== 'auto' ? appState.pausePoints : []))
+      if (appState.execMode === 'external') {
+        fd.append('provider', appState.providerSelected || 'jimeng')
+        fd.append('audio_source', appState.externalAudioSource)
+        fd.append('subtitle_source', appState.externalSubtitleSource)
+      }
 
       ev = {
         resolution: form.resolution,
@@ -90,7 +95,7 @@ async function submitManuscript() {
       </div>
     </div>
 
-    <SubtitleConfig ref="subtitleRef" task="m" :with-style="true" />
+    <SubtitleConfig ref="subtitleRef" task="m" :with-style="true" :external="appState.execMode === 'external'" />
 
     <WatermarkToggle />
 

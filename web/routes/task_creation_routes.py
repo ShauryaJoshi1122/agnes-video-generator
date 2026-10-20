@@ -54,6 +54,15 @@ _ALLOWED_UPLOAD_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".mp4"
 # ``[999999999]`` 之类输入放大成 GB 级分配打死进程）。
 _MAX_SCENE_COUNT = 30
 
+# v7.6 外部素材模式：各任务类型的默认暂停点（audio 检查点在 audio_source=video 时自动通过）
+_EXTERNAL_PAUSE_POINTS = {
+    "creative": ["scenes", "references", "videos", "subtitle"],
+    "manuscript": ["scenes", "videos", "subtitle"],
+    "poetry": ["scenes", "videos", "subtitle"],
+    "anchor": ["scenes", "videos"],
+}
+
+
 def _parse_scene_durations_json(scene_durations_json: str) -> list:
     """解析场景时长 JSON 数组，非法时抛 422。"""
     try:
@@ -96,24 +105,81 @@ def _parse_end_frame_indices(end_frame_indices_json: str) -> list:
     return ef_indices
 
 
-def _build_manual_config(execution_mode: str, pause_points: str) -> ManualConfig:
-    """构建手动模式配置（v6.0）。
+def _build_manual_config(
+    execution_mode: str,
+    pause_points: str,
+    provider: str = "jimeng",
+    audio_source: str = "project",
+    task_kind: str = "creative",
+    subtitle_source: str = "narration",
+) -> ManualConfig:
+    """构建手动/外部素材模式配置（v6.0 / v7.6）。
 
     Args:
-        execution_mode: "auto"（默认）或 "manual"。
-        pause_points: JSON 数组字符串（可选暂停点集合）；空/缺省且 manual 时 = 全部检查点。
+        execution_mode: "auto"（默认）/ "manual"（手动）/ "external"（外部素材）。
+        pause_points: JSON 数组字符串（可选暂停点集合）；空/缺省时，
+            manual = 全部检查点、external = 按 task_kind 的默认集合。
+        provider: external 模式下所选外部工具 id（非法/空回退 "jimeng"）。
+        audio_source: "project"（本项目 TTS）或 "video"（保留视频自带音轨）。
+        task_kind: creative / manuscript / poetry / anchor，决定 external 默认暂停点。
+        subtitle_source: external 模式字幕来源（"narration" 旁白 / "dialogue" 人物对白）；
+            非 external 时忽略（强制 narration）。
 
     Raises:
-        HTTPException: execution_mode 非法或 pause_points 含非法值。
+        HTTPException: execution_mode / pause_points / audio_source /
+            subtitle_source 非法。
     """
-    if execution_mode not in ("auto", "manual"):
+    if execution_mode not in ("auto", "manual", "external"):
         raise HTTPException(
             status_code=422,
             detail=translate("validation.execution_mode_invalid", None),
         )
     if execution_mode == "auto":
         return ManualConfig()
+    if audio_source not in ("project", "video"):
+        raise HTTPException(
+            status_code=422,
+            detail=translate("validation.audio_source_invalid", None),
+        )
 
+    points = _parse_pause_points(pause_points)
+
+    if execution_mode == "external":
+        if subtitle_source not in ("narration", "dialogue"):
+            raise HTTPException(
+                status_code=422,
+                detail=translate("validation.subtitle_source_invalid", None),
+            )
+        from core.providers import get_provider
+
+        return ManualConfig(
+            enabled=True,
+            pause_points=points or _EXTERNAL_PAUSE_POINTS.get(
+                task_kind, _EXTERNAL_PAUSE_POINTS["creative"]),
+            execution_mode="external",
+            provider=get_provider(provider).id,   # 非法/空 → 回退 jimeng
+            audio_source=audio_source,
+            subtitle_source=subtitle_source,
+        )
+
+    # manual（空 = 全部检查点暂停，PRD §4.3）
+    return ManualConfig(
+        enabled=True,
+        pause_points=points or list(ALL_CHECKPOINTS),
+        execution_mode="manual",
+    )
+
+
+def _external_video_audio(manual_config: ManualConfig) -> bool:
+    """外部素材模式 + 音频来源=视频 → 由视频自带音轨（禁用本项目 TTS）。"""
+    return (
+        manual_config.execution_mode == "external"
+        and manual_config.audio_source == "video"
+    )
+
+
+def _parse_pause_points(pause_points: str) -> list:
+    """解析并校验 pause_points JSON 数组（非法值抛 422）。"""
     try:
         points = json.loads(pause_points) if pause_points else []
     except Exception:
@@ -126,9 +192,7 @@ def _build_manual_config(execution_mode: str, pause_points: str) -> ManualConfig
             status_code=422,
             detail=translate("validation.pause_points_not_list", None),
         )
-
-    valid = set(ALL_CHECKPOINTS)
-    invalid = [p for p in points if p not in valid]
+    invalid = [p for p in points if p not in set(ALL_CHECKPOINTS)]
     if invalid:
         raise HTTPException(
             status_code=422,
@@ -139,8 +203,7 @@ def _build_manual_config(execution_mode: str, pause_points: str) -> ManualConfig
                 options=ALL_CHECKPOINTS,
             ),
         )
-    # 空 = 全部检查点暂停（PRD §4.3）
-    return ManualConfig(enabled=True, pause_points=points or list(ALL_CHECKPOINTS))
+    return points
 
 
 def _build_subtitle_config(
@@ -356,14 +419,24 @@ async def create_creative_task(
     subtitle_stroke_color: str = Form("black"),
     subtitle_stroke_width: int = Form(2),
     subtitle_bg_color: str = Form("black@0.5"),
-    # v6.0 手动模式
+    # v6.0 手动模式 / v7.6 外部素材模式
     execution_mode: str = Form("auto"),
     pause_points: str = Form(""),
+    provider: str = Form("jimeng"),
+    audio_source: str = Form("project"),
+    subtitle_source: str = Form("narration"),
 ):
     """创建创意长视频任务（类型 2）。"""
     api_key = get_api_key()
     if not api_key:
         raise HTTPException(status_code=400, detail=api_key_missing_msg())
+
+    manual_config = _build_manual_config(
+        execution_mode, pause_points, provider, audio_source, "creative",
+        subtitle_source)
+    # 外部素材 + 音频来源=视频 → 用视频自带音轨，禁用本项目 TTS
+    if _external_video_audio(manual_config):
+        audio_enabled = False
 
     # v4.0: 音色与目标语言兼容性校验
     if audio_enabled:
@@ -426,7 +499,7 @@ async def create_creative_task(
         generate_end_frames_from_ref=generate_end_frames_from_ref,
         audio_config=audio_config,
         subtitle_config=subtitle_config,
-        manual_config=_build_manual_config(execution_mode, pause_points),
+        manual_config=manual_config,
         # v7.0（issue #64）：任务级 UI 语言快照
         ui_language=get_current_lang(),
     )
@@ -521,14 +594,23 @@ async def create_manuscript_task(
     subtitle_stroke_color: str = Form("black"),
     subtitle_stroke_width: int = Form(2),
     subtitle_bg_color: str = Form("black@0.5"),
-    # v6.0 手动模式
+    # v6.0 手动模式 / v7.6 外部素材模式
     execution_mode: str = Form("auto"),
     pause_points: str = Form(""),
+    provider: str = Form("jimeng"),
+    audio_source: str = Form("project"),
+    subtitle_source: str = Form("narration"),
 ):
     """创建稿件长视频任务（类型 3）。"""
     api_key = get_api_key()
     if not api_key:
         raise HTTPException(status_code=400, detail=api_key_missing_msg())
+
+    manual_config = _build_manual_config(
+        execution_mode, pause_points, provider, audio_source, "manuscript",
+        subtitle_source)
+    if _external_video_audio(manual_config):
+        audio_enabled = False
 
     if not manuscript_text.strip():
         raise HTTPException(
@@ -607,7 +689,7 @@ async def create_manuscript_task(
         video_duration=video_duration,
         audio_config=audio_config,
         subtitle_config=subtitle_config,
-        manual_config=_build_manual_config(execution_mode, pause_points),
+        manual_config=manual_config,
         # v7.0（issue #64）：任务级 UI 语言快照
         ui_language=get_current_lang(),
     )
@@ -644,14 +726,23 @@ async def create_poetry_task(
     audio_lang: str = Form(""),  # 页面语言，用于音色兼容性校验
     # 字幕配置（默认开启，固定诗歌样式，用户仅开关）
     subtitle_enabled: bool = Form(True),
-    # v6.0 手动模式
+    # v6.0 手动模式 / v7.6 外部素材模式
     execution_mode: str = Form("auto"),
     pause_points: str = Form(""),
+    provider: str = Form("jimeng"),
+    audio_source: str = Form("project"),
+    subtitle_source: str = Form("narration"),
 ):
     """创建诗词视频任务（类型 6）。"""
     api_key = get_api_key()
     if not api_key:
         raise HTTPException(status_code=400, detail=api_key_missing_msg())
+
+    manual_config = _build_manual_config(
+        execution_mode, pause_points, provider, audio_source, "poetry",
+        subtitle_source)
+    if _external_video_audio(manual_config):
+        audio_enabled = False
 
     # v4.0: 音色与目标语言兼容性校验
     if audio_enabled:
@@ -730,7 +821,7 @@ async def create_poetry_task(
         scene_durations=scene_durations,
         audio_config=audio_config,
         subtitle_config=subtitle_config,
-        manual_config=_build_manual_config(execution_mode, pause_points),
+        manual_config=manual_config,
         # v7.0（issue #64）：任务级 UI 语言快照
         ui_language=get_current_lang(),
     )
@@ -769,14 +860,32 @@ async def create_anchor_task(
     subtitle_stroke_color: str = Form("black"),
     subtitle_stroke_width: int = Form(2),
     subtitle_bg_color: str = Form("black@0.5"),
-    # v6.0 手动模式
+    # v6.0 手动模式 / v7.6 外部素材模式
+    # ``audio_source`` 兼容两套词汇：anchor 自身的音频模式（post_stitch/model）
+    # 与外部素材模式的音频来源（project/video）——后者映射为前者
+    # （video→model=用视频自带音轨；project→post_stitch=本项目配音）。
     execution_mode: str = Form("auto"),
     pause_points: str = Form(""),
+    provider: str = Form("jimeng"),
+    subtitle_source: str = Form("narration"),
 ):
     """创建数字人口播任务（类型 4 / Phase 3）。"""
     api_key = get_api_key()
     if not api_key:
         raise HTTPException(status_code=400, detail=api_key_missing_msg())
+
+    if audio_source == "video":
+        audio_source, asset_audio_source = "model", "video"
+    elif audio_source == "project":
+        audio_source, asset_audio_source = "post_stitch", "project"
+    else:
+        asset_audio_source = "project"
+
+    manual_config = _build_manual_config(
+        execution_mode, pause_points, provider, asset_audio_source, "anchor",
+        subtitle_source)
+    if _external_video_audio(manual_config):
+        audio_enabled = False
 
     # v4.0: 音色与稿件文本兼容性校验
     # 数字人口播的稿件由用户直接输入，应以「稿件文本的实际文字体系」为准做脚本级
@@ -821,7 +930,7 @@ async def create_anchor_task(
         video_height=video_height,
         audio_config=audio_config,
         subtitle_config=subtitle_config,
-        manual_config=_build_manual_config(execution_mode, pause_points),
+        manual_config=manual_config,
         # v7.0（issue #64）：任务级 UI 语言快照
         ui_language=get_current_lang(),
     )

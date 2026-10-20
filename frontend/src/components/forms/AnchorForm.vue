@@ -49,16 +49,23 @@ async function submitAnchor() {
       fd.append('video_width', String(res.width))
       fd.append('video_height', String(res.height))
       if (form.refImage) fd.append('anchor_reference_image', form.refImage)
-      fd.append('audio_source', form.audioSource)
+      // v7.6 外部素材模式：音频来源改由外部模式决定；否则用数字人自身的音频模式
+      if (appState.execMode === 'external') {
+        fd.append('audio_source', appState.externalAudioSource)
+        fd.append('provider', appState.providerSelected || 'jimeng')
+        fd.append('subtitle_source', appState.externalSubtitleSource)
+      } else {
+        fd.append('audio_source', form.audioSource)
+      }
 
       const sc = subtitleRef.value
       collectAudioSubtitleFields(fd, sc, voiceSelections, 'a')
       // 特例：model 自带口型音频 → 强制关闭 TTS 旁白
-      if (form.audioSource === 'model') fd.set('audio_enabled', 'false')
+      if (appState.execMode !== 'external' && form.audioSource === 'model') fd.set('audio_enabled', 'false')
 
-      // v6.0 手动模式：执行模式 + 暂停点
+      // v6.0 手动模式 / v7.6 外部素材模式：执行模式 + 暂停点
       fd.append('execution_mode', appState.execMode)
-      fd.append('pause_points', JSON.stringify(appState.execMode === 'manual' ? appState.pausePoints : []))
+      fd.append('pause_points', JSON.stringify(appState.execMode !== 'auto' ? appState.pausePoints : []))
 
       ev = {
         resolution: form.resolution,
@@ -141,7 +148,7 @@ async function submitAnchor() {
 
     <!-- Audio & Subtitle（model 模式禁用音频） -->
     <div :class="{ 'opacity-40 pointer-events-none': form.audioSource === 'model' }">
-      <SubtitleConfig ref="subtitleRef" task="a" :with-style="true" />
+      <SubtitleConfig ref="subtitleRef" task="a" :with-style="true" :external="appState.execMode === 'external'" />
     </div>
 
     <WatermarkToggle />

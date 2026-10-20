@@ -148,6 +148,11 @@ export function getModels(refresh = false) {
   return request('/api/models' + (refresh ? '?refresh=1' : ''))
 }
 
+// ── v7.6 外部素材模式：外部工具注册表（GET /api/providers）──
+export function getProviders() {
+  return request<{ ok: boolean; providers: any[] }>('/api/providers')
+}
+
 // ── 音色 ──
 export function getVoices() {
   return request('/api/voices')
@@ -336,4 +341,17 @@ export function uploadArtifact(taskId: string, artifactId: string, file: File) {
     method: 'POST',
     body: form,
   }).then((r) => r.json())
+}
+
+// ── v7.6 外部素材模式：批量导入产物（归一化 + 探针回显）──
+// kind: 'image' | 'video'；scene_map 可选（{"1":"scene_0",...}）
+export function importArtifacts(taskId: string, files: File[], kind: string, sceneMap?: Record<string, string>) {
+  const form = new FormData()
+  files.forEach((f) => form.append('files', f))
+  form.append('kind', kind)
+  if (sceneMap) form.append('scene_map', JSON.stringify(sceneMap))
+  return request<{ ok: boolean; results: any[] }>('/api/tasks/' + taskId + '/artifacts/import', {
+    method: 'POST',
+    body: form,
+  })
 }

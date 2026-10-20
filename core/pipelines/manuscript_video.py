@@ -567,6 +567,17 @@ class ManuscriptVideoPipeline(MultiScenePipeline):
             dur = max(duration_len(p.text) / estimate_chars_per_sec(p.text), 2.0) if p.text else 5.0
             segment_durations.append(dur)
 
+        # v7.6 外部素材模式（保留视频自带音轨）：字幕按各段落视频真实时长对齐，
+        # 且不用本项目（静音占位）音频时长做整体缩放。
+        audio_path_for_srt = self._state.combined_audio or ""
+        if self._keeps_video_audio():
+            para_video_paths = [
+                os.path.join(self.working_dir, f"para_{p.index}", "video.mp4")
+                for p in paragraphs
+            ]
+            segment_durations = self.resolve_segment_durations(para_video_paths, segment_durations)
+            audio_path_for_srt = ""
+
         await self._emit(
             "subtitle", "running",
             self._t(
@@ -582,7 +593,7 @@ class ManuscriptVideoPipeline(MultiScenePipeline):
             segment_durations=segment_durations,
             subtitle_config=subtitle_config,
             sub_maker=sub_maker,
-            audio_path=self._state.combined_audio or "",
+            audio_path=audio_path_for_srt,
             screenwriter=self.screenwriter,
             video_width=self._state.video_width,
             video_height=self._state.video_height,
@@ -623,8 +634,11 @@ class ManuscriptVideoPipeline(MultiScenePipeline):
         if not video_paths:
             raise RuntimeError("[Manuscript] concatenate: no valid videos to concatenate")
 
-        has_audio = self._state.audio_config.enabled and bool(self._state.combined_audio)
+        audio_enabled = self._state.audio_config.enabled
+        has_audio = audio_enabled and bool(self._state.combined_audio)
         has_subtitle = subtitle_config.enabled and bool(self._state.combined_subtitle)
+        # v7.6 需求 A：完全不勾选配音时保留视频自身音轨（不注入静音轨替换）。
+        use_keep_audio = (not audio_enabled) and has_subtitle
 
         styles_path = self._state.subtitle_styles_path or ""
         if styles_path and not os.path.exists(styles_path):
@@ -635,7 +649,21 @@ class ManuscriptVideoPipeline(MultiScenePipeline):
             len(video_paths), has_audio, has_subtitle, output_path,
         )
 
-        if has_audio or has_subtitle:
+        if use_keep_audio:
+            await self._emit(
+                "concatenate", "running",
+                self._t("progress.manuscript.concat_av", n=len(video_paths)),
+                _PROGRESS_CONCAT_START,
+            )
+            await asyncio.to_thread(
+                VideoConcatenator.concat_videos_keep_audio,
+                video_paths=video_paths,
+                srt_path=self._state.combined_subtitle,
+                output_path=output_path,
+                subtitle_style=subtitle_config.style,
+                subtitle_styles_path=styles_path if styles_path else None,
+            )
+        elif has_audio or has_subtitle:
             await self._emit(
                 "concatenate", "running",
                 self._t("progress.manuscript.concat_av", n=len(video_paths)),

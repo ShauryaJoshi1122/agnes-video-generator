@@ -600,6 +600,168 @@ class TestPipelineResume(BasePipelineTest):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# v7.6 外部素材模式（external）：检查点序列 + 不调用 Agnes 生成素材
+# ══════════════════════════════════════════════════════════════════════
+
+class TestExternalCreativePipeline(BasePipelineTest):
+    """X1 前置段：外部素材模式下应在生成分镜提示词后暂停等待回填，
+    且**不调用** Agnes 图像/视频生成。"""
+
+    # 复刻真实任务 20261015_164207_b758a4fd8f5c 的输入（中文 idea + 英文 style，
+    # 外部素材模式，pause_points 含 videos）——验证「外部模式走到 videos 暂停前
+    # 不调用 Agnes」这一逻辑。
+    _IDEA = (
+        "竖屏 9:16，单镜头，一镜到底，10 秒，真人短剧，喜剧反转，电影感写实，"
+        "暖色卧室夜景。中景，镜头轻微缓慢推近，不切镜。年轻男生 A 穿灰色睡衣躺在床上"
+        "玩手机，神情虚弱；朋友 B 穿卫衣站在床边，表情关切。床头柜上有一台路由器，"
+        "蓝灯闪烁，旁边有一台像医疗监护仪的家用设备。A 虚弱地说：“当我的生命需要用"
+        "设备维持的时候，请帮我拔掉它。” B 含泪问：“真的吗？” A 闭眼点头：“嗯……”"
+        " B 伸手拔掉路由器插头，路由器灯灭。A 瞬间从床上弹起，惊恐大喊：“哎，你干嘛呢？"
+        "赶紧把路由器给我接上！！” B 一脸懵。节奏从温情突然转喜剧，表情夸张，字幕同步。"
+        "音效：温情钢琴骤停、断电声、喜剧鼓点。角色一致，画面稳定，无血腥，无恐怖。"
+    )
+    _STYLE = (
+        "documentary photography, natural available light, authentic candid framing, "
+        "photojournalistic realism, subdued natural color grade, fine film grain"
+    )
+
+    async def _make_state(self):
+        from models.task import ManualConfig
+
+        return CreativeVideoTask(
+            task_type="creative",
+            creative_name="mock_external",
+            idea=self._IDEA,
+            style=self._STYLE,
+            chaining_mode="keyframes",
+            scene_count=1,
+            scene_durations=[10],
+            duration_source="manual",
+            video_width=768,
+            video_height=1152,
+            audio_config=AudioConfig(enabled=False),
+            subtitle_config=SubtitleConfig(enabled=True),
+            manual_config=ManualConfig(
+                enabled=True,
+                pause_points=["scenes", "references", "videos", "subtitle"],
+                execution_mode="external",
+                provider="jimeng",
+                audio_source="video",
+            ),
+        )
+
+    @pytest.mark.asyncio
+    async def test_external_checkpoint_sequence(self, temp_workdir, monkeypatch):
+        """外部模式：暂停序列应为 scenes → references → videos，到 videos 即为终点
+        （等待用户回填视频）；全程不调用 Agnes 生成分镜素材——PRD 检查点产物矩阵中
+        videos 的「本项目产物」为「—」。"""
+        import json
+
+        from core.pipelines.creative.pipeline import CreativeVideoPipeline
+        from mock_regression.mock_apis import MockAgnesImageAPI, MockAgnesVideoAPI
+
+        calls = {"video": 0, "image": 0}
+        orig_submit = MockAgnesVideoAPI.submit_video
+        orig_image = MockAgnesImageAPI.generate_single_image
+
+        async def spy_submit(self, *a, **k):
+            calls["video"] += 1
+            return await orig_submit(self, *a, **k)
+
+        async def spy_image(self, *a, **k):
+            calls["image"] += 1
+            return await orig_image(self, *a, **k)
+
+        monkeypatch.setattr(MockAgnesVideoAPI, "submit_video", spy_submit)
+        monkeypatch.setattr(MockAgnesImageAPI, "generate_single_image", spy_image)
+
+        state = await self._make_state()
+        pipeline = CreativeVideoPipeline(
+            api_key="mock_key", task_id="test_external_001", dir_name=temp_workdir,
+        )
+
+        # run() 内部捕获 CheckpointPause 后正常返回，暂停态体现为
+        # status=PENDING + manual_config.current_checkpoint
+        seq = []
+        for _ in range(6):
+            await pipeline.run(state)
+            if state.status != StepStatus.PENDING or not state.manual_config.current_checkpoint:
+                break
+            cp = state.manual_config.current_checkpoint
+            seq.append(cp)
+            # 走到 videos 检查点即终点：等待用户回填视频，测试到此停止（不 approve）
+            if cp == "videos":
+                break
+            state.manual_config.approved_checkpoints.append(cp)
+
+        assert seq == ["scenes", "references", "videos"], seq
+        assert state.manual_config.current_checkpoint == "videos"
+        # 暂停于 videos 时「给即梦的提示词」（script.json 分镜脚本）已就绪，
+        # 用户据此在即梦生成分镜视频后回填（见 core/providers.py jimeng.videos）
+        script_path = os.path.join(temp_workdir, "script.json")
+        assert os.path.exists(script_path), "script.json (即梦提示词来源) missing"
+        with open(script_path, encoding="utf-8") as f:
+            script = json.load(f)
+        assert script, "script.json has no scenes"
+
+        def _prompt_of(item):
+            if isinstance(item, dict):
+                return (item.get("scene_prompt") or item.get("description")
+                        or item.get("prompt") or "").strip()
+            return str(item).strip()
+
+        assert all(_prompt_of(it) for it in script), f"scene prompts empty: {script}"
+        # 外部模式下不调用 Agnes 生成分镜素材
+        assert calls == {"video": 0, "image": 0}, f"Agnes generation called: {calls}"
+        # 暂停于 videos 时磁盘上不应出现本项目生成的分镜素材
+        scene_dir = os.path.join(temp_workdir, "scene_0")
+        scene_files = set(os.listdir(scene_dir)) if os.path.isdir(scene_dir) else set()
+        assert "video.mp4" not in scene_files, f"unexpected project-generated video: {scene_files}"
+        assert "end_frame.png" not in scene_files, \
+            f"unexpected project-generated end frame: {scene_files}"
+
+    @pytest.mark.asyncio
+    async def test_external_keep_audio_full_run_no_project_audio(self, temp_workdir):
+        """外部素材 + 保留视频自带音轨：回填视频后跑完整条流水线，
+        本项目**不产出** combined_narration.mp3，仍合成出最终视频（缺陷 2 回归）。"""
+        from core.pipelines.creative.pipeline import CreativeVideoPipeline
+        from utils.video import normalize_external_video
+
+        _ASSETS = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "mock_regression", "assets",
+        )
+        fixture = os.path.join(_ASSETS, "test_video_5s.mp4")
+        if not os.path.exists(fixture):
+            pytest.skip("fixture video missing")
+
+        state = await self._make_state()
+        state.audio_config = AudioConfig(enabled=False)
+        pipeline = CreativeVideoPipeline(
+            api_key="mock_key", task_id="test_external_keep_audio",
+            dir_name=temp_workdir,
+        )
+
+        scene_dir = os.path.join(temp_workdir, "scene_0")
+        for _ in range(8):
+            await pipeline.run(state)
+            if state.status != StepStatus.PENDING or not state.manual_config.current_checkpoint:
+                break
+            cp = state.manual_config.current_checkpoint
+            if cp == "videos":
+                os.makedirs(scene_dir, exist_ok=True)
+                normalize_external_video(
+                    fixture, os.path.join(scene_dir, "video.mp4"), 768, 1152,
+                )
+            state.manual_config.approved_checkpoints.append(cp)
+
+        assert state.status == StepStatus.COMPLETED, f"pipeline not completed: {state.status}"
+        assert not os.path.exists(os.path.join(temp_workdir, "combined_narration.mp3")), \
+            "keep-audio mode must not produce combined_narration.mp3"
+        assert state.final_video_file and os.path.exists(state.final_video_file)
+
+
+# ══════════════════════════════════════════════════════════════════════
 # 入口
 # ══════════════════════════════════════════════════════════════════════
 

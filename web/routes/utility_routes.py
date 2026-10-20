@@ -18,6 +18,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["utility"])
 
 
+@router.get("/api/providers")
+async def list_providers():
+    """返回外部素材工具注册表（v7.6）。
+
+    供前端「视频生成工具」下拉使用；**不含**各检查点提示词模板
+    （体积大，模板随检查点详情 ``external_hint`` 下发）。
+    """
+    from core.providers import list_providers as _list
+    from core.providers import provider_public
+
+    return {"ok": True, "providers": [provider_public(p.id) for p in _list()]}
+
+
 @router.get("/")
 async def root():
     index_path = os.path.join(os.path.dirname(__file__), "..", "..", "static", "index.html")

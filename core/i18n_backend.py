@@ -540,6 +540,10 @@ CATALOG: Dict[str, Dict[str, str]] = {
         "zh": "角色参考图生成完成",
         "en": "Character reference image generated",
     },
+    "progress.creative_script.character_ref_external": {
+        "zh": "外部素材模式：跳过角色参考图生成",
+        "en": "External asset mode: skipping character reference generation",
+    },
     "progress.creative_script.script_running": {
         "zh": "正在编写脚本...",
         "en": "Writing the script...",
@@ -556,6 +560,10 @@ CATALOG: Dict[str, Dict[str, str]] = {
         "zh": "尾帧提示词完成，共 {n} 个",
         "en": "End-frame prompts complete, {n} total",
     },
+    "progress.creative_script.end_frame_prompts_external": {
+        "zh": "外部素材模式：跳过尾帧提示词生成",
+        "en": "External asset mode: skipping end-frame prompt generation",
+    },
     "progress.creative_frames.using_user_end_frame": {
         "zh": "场景 {i}/{total}: 使用自定义尾帧",
         "en": "Scene {i}/{total}: using your custom end frame",
@@ -571,6 +579,10 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "progress.creative_frames.end_frame_pregen_done": {
         "zh": "尾帧预生成全部完成 ({done}/{total})",
         "en": "All end frames pre-generated ({done}/{total})",
+    },
+    "progress.creative_frames.end_frame_external": {
+        "zh": "外部素材模式：跳过尾帧自动生成",
+        "en": "External asset mode: skipping end-frame generation",
     },
     "progress.creative_video.scene_submit_ti2vid": {
         "zh": "场景 {i}/{total}: 提交任务 (ti2vid)...",
@@ -771,8 +783,36 @@ CATALOG: Dict[str, Dict[str, str]] = {
         "en": "Scene {scene_index} duration must be within 2-30 seconds",
     },
     "validation.execution_mode_invalid": {
-        "zh": "execution_mode 必须为 auto 或 manual",
-        "en": "execution_mode must be either auto or manual",
+        "zh": "execution_mode 必须为 auto、manual 或 external",
+        "en": "execution_mode must be auto, manual, or external",
+    },
+    "validation.audio_source_invalid": {
+        "zh": "audio_source 必须为 project 或 video",
+        "en": "audio_source must be either project or video",
+    },
+    "validation.subtitle_source_invalid": {
+        "zh": "subtitle_source 必须为 narration 或 dialogue",
+        "en": "subtitle_source must be either narration or dialogue",
+    },
+    "validation.import_kind_invalid": {
+        "zh": "kind 必须为 image 或 video",
+        "en": "kind must be either image or video",
+    },
+    "validation.import_scene_map_invalid": {
+        "zh": "scene_map 必须为 JSON 对象（场景序号 → 目录名）",
+        "en": "scene_map must be a JSON object (scene index → directory name)",
+    },
+    "artifacts.import_no_files": {
+        "zh": "未收到任何文件",
+        "en": "No files received",
+    },
+    "artifacts.import_partial": {
+        "zh": "已导入 {ok} 个文件，{failed} 个失败",
+        "en": "Imported {ok} file(s), {failed} failed",
+    },
+    "artifacts.probe_missing": {
+        "zh": "文件不存在",
+        "en": "File not found",
     },
     "validation.pause_points_not_list": {
         "zh": "pause_points 必须为 JSON 数组",
@@ -937,6 +977,10 @@ CATALOG: Dict[str, Dict[str, str]] = {
     "checkpoint.json_required": {
         "zh": "modified_artifact_ids / param_updates 必须为 JSON",
         "en": "modified_artifact_ids / param_updates must be valid JSON",
+    },
+    "checkpoint.approve.missing_videos": {
+        "zh": "尚未导入以下场景视频，无法确认：第 {scenes} 场景",
+        "en": "Scene video(s) not yet imported, cannot approve: scene(s) {scenes}",
     },
     "gallery.task_not_found": {
         "zh": "任务不存在",

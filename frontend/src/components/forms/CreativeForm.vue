@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { t, currentLang } from '@/i18n'
 import { appState } from '@/store'
 import { useVoice } from '@/composables/useVoice'
@@ -31,7 +31,7 @@ const form = reactive({
   refImage: null as File | null,
   refName: '',
   useEndFrames: false,
-  genEndFromRef: true,
+  genEndFromRef: false,
   endFrames: [] as File[],
   // v5.0 优化 5：用户上传分镜场景图（按场景 index 对齐）
   sceneRefs: [] as File[],
@@ -80,6 +80,15 @@ function onRefImageChange(e: Event) {
   form.refImage = file
   form.refName = file ? file.name : ''
 }
+
+// v7.6 外部素材模式：尾帧/角色参考图由外部工具（即梦）产出后导入，
+// 本项目不再自动生成 → 取消并禁用两个尾帧选项（默认也不勾选）。
+watch(() => appState.execMode, (mode) => {
+  if (mode === 'external') {
+    form.useEndFrames = false
+    form.genEndFromRef = false
+  }
+}, { immediate: true })
 
 function toggleEndFrames() {
   if (!form.useEndFrames) {
@@ -168,9 +177,14 @@ async function submitCreative() {
       const sc = subtitleRef.value
       collectAudioSubtitleFields(fd, sc, voiceSelections, 'c', currentLang.value)
 
-      // v6.0 手动模式：执行模式 + 暂停点
+      // v6.0 手动模式 / v7.6 外部素材模式：执行模式 + 暂停点 + 工具与音频来源
       fd.append('execution_mode', appState.execMode)
-      fd.append('pause_points', JSON.stringify(appState.execMode === 'manual' ? appState.pausePoints : []))
+      fd.append('pause_points', JSON.stringify(appState.execMode !== 'auto' ? appState.pausePoints : []))
+      if (appState.execMode === 'external') {
+        fd.append('provider', appState.providerSelected || 'jimeng')
+        fd.append('audio_source', appState.externalAudioSource)
+        fd.append('subtitle_source', appState.externalSubtitleSource)
+      }
 
       ev = {
         style: form.style,
@@ -311,12 +325,12 @@ async function submitCreative() {
         <div class="flex items-center justify-between mb-3">
           <label class="text-sm text-muted">{{ t('customEndFrames') }}</label>
           <div class="flex gap-3">
-            <label class="flex items-center gap-2 text-sm text-muted cursor-pointer">
-              <input v-model="form.useEndFrames" type="checkbox" class="rounded bg-paper-2 border-rule" @change="toggleEndFrames" />
+            <label class="flex items-center gap-2 text-sm text-muted cursor-pointer" :class="appState.execMode === 'external' ? 'opacity-50 cursor-not-allowed' : ''">
+              <input v-model="form.useEndFrames" type="checkbox" class="rounded bg-paper-2 border-rule" :disabled="appState.execMode === 'external'" @change="toggleEndFrames" />
               <span>{{ t('enableCustomEndFrames') }}</span>
             </label>
-            <label class="flex items-center gap-2 text-sm text-muted cursor-pointer">
-              <input v-model="form.genEndFromRef" type="checkbox" class="rounded bg-paper-2 border-rule" @change="toggleEndFrameMode" />
+            <label class="flex items-center gap-2 text-sm text-muted cursor-pointer" :class="appState.execMode === 'external' ? 'opacity-50 cursor-not-allowed' : ''">
+              <input v-model="form.genEndFromRef" type="checkbox" class="rounded bg-paper-2 border-rule" :disabled="appState.execMode === 'external'" @change="toggleEndFrameMode" />
               <span>{{ t('genEndFramesFromRef') }}</span>
             </label>
           </div>
@@ -346,7 +360,7 @@ async function submitCreative() {
     </div>
 
     <!-- Audio & Subtitle -->
-    <SubtitleConfig ref="subtitleRef" task="c" :with-style="true" />
+    <SubtitleConfig ref="subtitleRef" task="c" :with-style="true" :external="appState.execMode === 'external'" />
 
     <WatermarkToggle />
 

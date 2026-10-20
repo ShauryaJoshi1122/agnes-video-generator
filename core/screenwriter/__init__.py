@@ -52,7 +52,7 @@ def is_prompt_language_explicit() -> bool:
         return False
 
 
-def build_input_language_directive(text: str) -> str:
+def build_input_language_directive(text: str, external: bool = False) -> str:
     """为非中文输入构建前置到 style 的显式语言指令（PRD 1.4 pinning 的补充）。
 
     背景：agnes-2.0-flash 在英文系统提示词（language pinning）下仍会因 user
@@ -60,11 +60,14 @@ def build_input_language_directive(text: str) -> str:
     中文故事/旁白（2026-08-31 实测复现）。仅靠 pinning 不足，需要一条显式目标
     语言指令前置到 style——与 preview 端点的 ``_language_directive`` 同机制。
 
-    中文/无法识别脚本返回空串（无指令，保持既有行为）；场景视觉提示词仍保持
-    英文（视频生成模型对英文提示词响应更精确）。
+    中文输入：非外部模式返回空串（无指令，保持既有行为）；**外部素材模式**下画面
+    提示词直接交给外部工具生成，需显式钉住中文——默认英文 meta-prompt（language
+    pinning）叠加英文 style 会把中文 idea 的故事/分镜写英文（2026-10-15 实测复现）。
 
     Args:
         text: 输入文本（创意流水线为 idea），用于检测主要文字体系。
+        external: 外部素材模式（v7.6）——分镜视觉提示词将交给外部工具（如即梦）
+            生成，此时**不再**强制英文，而是要求与输入原文语言一致。
 
     Returns:
         前置到 style 的语言指令字符串；无需指令时为空串。
@@ -74,9 +77,11 @@ def build_input_language_directive(text: str) -> str:
     if not text or not text.strip():
         return ""
     script = detect_text_script(text)
-    if script in ("zh", "unknown"):
+    if script == "unknown":
         return ""
-    labels = {"arabic": "Arabic", "ru": "Russian", "ja": "Japanese", "ko": "Korean"}
+    if script == "zh" and not external:
+        return ""
+    labels = {"zh": "Chinese", "arabic": "Arabic", "ru": "Russian", "ja": "Japanese", "ko": "Korean"}
     label = labels.get(script)
     if label:
         head = (
@@ -91,11 +96,18 @@ def build_input_language_directive(text: str) -> str:
             "language as the input idea — do not switch to another language "
             "(in particular, do not write in Chinese unless the input is Chinese)."
         )
-    return (
-        head
-        + " For scene visual prompts specifically, still write in English instead "
-        "(video generation models respond more precisely to English prompts).\n\n"
-    )
+    if external:
+        # 外部素材模式：分镜提示词直接交给外部工具，语言与输入原文保持一致
+        tail = (
+            " For scene visual prompts specifically, also write in the SAME "
+            "language as the input idea — do not translate them to English.\n\n"
+        )
+    else:
+        tail = (
+            " For scene visual prompts specifically, still write in English instead "
+            "(video generation models respond more precisely to English prompts).\n\n"
+        )
+    return head + tail
 
 # 图片描述重试间隔基数（秒）：delay = 基数 * (attempt + 1)
 _DESCRIBE_RETRY_BASE_DELAY_SECONDS = 15

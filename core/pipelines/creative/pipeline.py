@@ -92,12 +92,18 @@ class CreativeVideoPipeline(
         """用户 style 前置基于 idea 文字体系的显式语言指令。
 
         idea 为非中文脚本时返回「指令 + style」，中文 idea 原样返回 style
-        （指令为空串）。指令确保故事/旁白跟随输入语言，同时保留"场景视觉提示词
-        用英文"的既有约定。
+        （指令为空串）。默认指令确保故事/旁白跟随输入语言，同时保留"场景视觉
+        提示词用英文"的既有约定。
+
+        v7.6 外部素材模式：分镜视觉提示词直接交给外部工具（即梦）生成，不做
+        英文转换——分镜语言与用户输入原文语言保持一致（``external=True``）。
         """
         from core.screenwriter import build_input_language_directive
 
-        return build_input_language_directive(self._state.idea) + self._state.style
+        return (
+            build_input_language_directive(self._state.idea, external=self._is_external())
+            + self._state.style
+        )
 
     # ------------------------------------------------------------------
     # Properties
@@ -148,6 +154,12 @@ class CreativeVideoPipeline(
             # 用户已提供参考图 → 角色参考图直接复用，不生成新图，不暂停
             if state.reference_image:
                 steps.discard("step_character_ref")
+            # v7.6 外部素材模式：暂停点为粗粒度检查点（scenes/references/videos/subtitle），
+            # 需补回两个粗粒度合并步骤，使其完成后能在 scenes/references 暂停供导入产物。
+            mc = getattr(state, "manual_config", None)
+            if mc and getattr(mc, "execution_mode", "auto") == "external":
+                steps.add("step_build_scenes")
+                steps.add("step_reference_images")
         return steps
 
     # ------------------------------------------------------------------

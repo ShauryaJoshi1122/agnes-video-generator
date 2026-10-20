@@ -7,8 +7,10 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import shutil
 import tempfile
+from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -30,7 +32,9 @@ from core.i18n_backend import translate
 from core.path_security import UnsafePathError, safe_join
 from core.task_manager import TaskManager
 from models.task import StepStatus
+from utils.image import normalize_external_image
 from utils.network import describe_network_error
+from utils.video import normalize_external_video, probe_media
 from web import app_state, helpers
 from web.log_safe import safe_log
 
@@ -386,8 +390,136 @@ async def get_task_checkpoint(task_id: str, checkpoint: str):
         "ok": True,
         "checkpoint": checkpoint,
         "working_dir": tm.task_dir,
+        "external_hint": _build_external_hint(state, checkpoint, tm.task_dir),
         **group,
     }
+
+
+def _build_external_hint(state, checkpoint: str, working_dir: str):
+    """构建外部素材模式检查点提示（v7.6）；非外部任务返回 None。
+
+    Returns:
+        ``{provider:{id,name,name_key,icon,url,experimental,guide_path,faq_path},
+        prompt, fill_guide, notes, notes_key}``
+        或 None（非 external / 该工具未定义此检查点提示词）。
+
+    ``provider.experimental`` / ``guide_path`` / ``faq_path`` 驱动前端「试验中」
+    气泡与官网说明链接（路径不含语言前缀，由前端按 UI 语言拼接）。
+    """
+    mc = getattr(state, "manual_config", None)
+    if mc is None or getattr(mc, "execution_mode", "auto") != "external":
+        return None
+    from core.providers import get_provider, render_prompt
+
+    p = get_provider(getattr(mc, "provider", "") or "")
+    if checkpoint not in p.checkpoint_prompts and checkpoint not in p.fill_guide:
+        return None
+    durations = getattr(state, "scene_durations", None) or []
+    scene_count = getattr(state, "scene_count", 0) or len(durations)
+    extra = {
+        "scene_count": scene_count,
+        "total_duration": sum(d for d in durations if isinstance(d, (int, float))),
+    }
+    # v7.6：`videos` 检查点给的是「用户直接粘贴到即梦」的视频生成提示词（分镜脚本
+    # 本身），而非操作流程说明；其余检查点仍用声明的协作模板。
+    if checkpoint == "videos":
+        prompt = build_external_video_prompts(state, working_dir)
+    else:
+        prompt = render_prompt(p.id, checkpoint, working_dir, extra)
+    return {
+        "provider": {
+            "id": p.id, "name": p.name, "name_key": p.name_key, "icon": p.icon,
+            "url": p.url,
+            # 试验阶段标记 + 官网说明页路径（前端拼上 UI 语言前缀后渲染）
+            "experimental": p.experimental,
+            "guide_path": p.guide_path,
+            "faq_path": p.faq_path,
+        },
+        "prompt": prompt,
+        "fill_guide": p.fill_guide.get(checkpoint, ""),
+        "notes": p.notes,
+        "notes_key": p.notes_key,
+    }
+
+
+_SCENE_PROMPT_KEYS = ("scene_prompt", "description", "prompt", "text")
+
+
+def _scene_prompt_of(item) -> str:
+    """从分镜条目提取可用作即梦提示词的画面描述。
+
+    容忍三种形态：``SceneTask`` / ``Paragraph`` 等模型对象（读属性）、
+    ``dict``（读键）、纯字符串（原样返回）。**不得**把非字符串对象
+    ``str()`` 化——那会把模型 repr 当成提示词下发。
+    """
+    if isinstance(item, dict):
+        candidates = (item.get(k) for k in _SCENE_PROMPT_KEYS)
+    elif isinstance(item, str):
+        return item.strip()
+    else:
+        candidates = (getattr(item, k, None) for k in _SCENE_PROMPT_KEYS)
+    for v in candidates:
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
+
+
+def build_external_video_prompts(state, working_dir: str) -> str:
+    """按场景组装「可直接粘贴到即梦」的视频生成提示词（v7.6）。
+
+    数据来源按优先级：``state.scenes[].scene_prompt``（poetry / manuscript /
+    已登记场景）→ 分镜脚本文件 ``state.script_file``（creative：分镜描述落在
+    ``script.json``，``scenes[].scene_prompt`` 为空）→ ``state.paragraphs``
+    （稿件兜底）。每个场景附「场景序号 / 总时长」，便于用户逐段生成。
+
+    Returns:
+        已就绪的提示词文本；无可用分镜数据时返回空串。
+    """
+    texts = [_scene_prompt_of(s) for s in (getattr(state, "scenes", None) or [])]
+    if not any(texts):
+        script_file = getattr(state, "script_file", "") or ""
+        if script_file:
+            path = script_file if os.path.isabs(script_file) else os.path.join(working_dir, script_file)
+            if os.path.exists(path):
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        data = json.load(f)
+                    if isinstance(data, list):
+                        texts = [_scene_prompt_of(it) for it in data]
+                except (OSError, ValueError):
+                    logger.warning("[Diagnostics] external videos: failed to read %s", path)
+    if not any(texts):
+        texts = [_scene_prompt_of(p) for p in (getattr(state, "paragraphs", None) or [])]
+
+    texts = [t for t in texts if t]
+    if not texts:
+        return ""
+    # v7.6 外部素材模式 · 对白字幕来源：各场景台词附在提示词末尾，
+    # 便于用户在外部工具生成视频时同步产出画面内对白。
+    dialogues: list = []
+    mc = getattr(state, "manual_config", None)
+    if (
+        mc
+        and getattr(mc, "execution_mode", "auto") == "external"
+        and getattr(mc, "subtitle_source", "narration") == "dialogue"
+    ):
+        dialogues = [
+            getattr(s, "dialogue", "") or ""
+            for s in (getattr(state, "scenes", None) or [])
+        ]
+
+    durations = getattr(state, "scene_durations", None) or []
+    total = len(texts)
+    blocks = []
+    for i, txt in enumerate(texts):
+        dur = durations[i] if i < len(durations) else ""
+        header = f"【场景 {i + 1}/{total}" + (f" · {dur}s" if dur else "") + "】"
+        block = f"{header}\n{txt}"
+        dlg = dialogues[i] if i < len(dialogues) else ""
+        if dlg:
+            block += f"\n台词（对白）：{dlg}"
+        blocks.append(block)
+    return "\n\n".join(blocks)
 
 
 @router.get("/api/tasks/{task_id}/checkpoints/{checkpoint}/impact")
@@ -481,6 +613,248 @@ async def upload_task_artifact(
     return {"ok": True, "artifact_id": artifact_id, "size": len(content)}
 
 
+# ═══════════════════════════════════════════════════════════════
+# v7.6 外部素材模式：批量导入 + 探针
+# ═══════════════════════════════════════════════════════════════
+
+# 场景/段落子目录名（scene_0 / para_1 …）
+_SCENE_DIR_RE = re.compile(r"^(?:scene|para)_\d+$")
+# 段落型流水线（稿件）的子目录前缀；其余为 scene
+_PARA_PREFIX_TASKS = {"manuscript"}
+
+
+def _first_number(text: str) -> Optional[int]:
+    """取字符串中第一个连续数字（``scene_3.mp4`` → 3），无则 None。"""
+    m = re.search(r"\d+", text or "")
+    return int(m.group()) if m else None
+
+
+def _resolve_scene_target(
+    task_type: str, kind: str, mapping: dict, filename: str, pos: int, scene_count: int = 0
+) -> str:
+    """把上传文件解析为任务目录下的目标相对路径（v7.6 外部素材导入）。
+
+    优先级：
+      1. ``scene_map`` 显式指定（值形如 ``scene_2`` / ``para_1``）；
+      2. 文件名（去扩展名）首个数字 N → ``{prefix}_{N-1}``
+         （即梦常导出 scene_1.mp4 表示第 1 段）；仅当 ``1 ≤ N ≤ scene_count`` 时才采用
+         （``scene_count`` ≤ 0 时不限），避免把文件名里的年份/时间戳（如
+         ``20261015.mp4`` → 2026）误当场景序号而落到 ``scene_2025/``；
+      3. 兜底按上传顺序 → ``{prefix}_{pos}``。
+
+    ``video`` → ``{dir}/video.mp4``；``image`` → ``{dir}/ref.png``。
+    数字人（anchor）无逐场景目录：``video`` → ``clip/clip.mp4``、``image`` → ``anchor.png``。
+    """
+    if task_type == "anchor":
+        return "clip/clip.mp4" if kind == "video" else "anchor.png"
+
+    stem = os.path.splitext(filename)[0]
+    num = _first_number(stem)
+    if num is not None and scene_count > 0 and not (1 <= num <= scene_count):
+        num = None
+    prefix = "para" if task_type in _PARA_PREFIX_TASKS else "scene"
+    scene_dir = ""
+    if mapping:
+        candidates = [str(pos + 1)] + ([str(num)] if num is not None else [])
+        for key in candidates:
+            val = str(mapping.get(key, "") or "")
+            if _SCENE_DIR_RE.match(val):
+                scene_dir = val
+                break
+    if not scene_dir:
+        scene_dir = f"{prefix}_{num - 1}" if num and num >= 1 else f"{prefix}_{pos}"
+
+    return os.path.join(scene_dir, "video.mp4" if kind == "video" else "ref.png")
+
+
+@router.post("/api/tasks/{task_id}/artifacts/import")
+async def import_task_artifacts(
+    task_id: str,
+    files: List[UploadFile] = File(...),
+    kind: str = Form("video"),
+    scene_map: str = Form(""),
+):
+    """批量导入外部工具（即梦）导出的分镜素材（v7.6）。
+
+    归一化到任务目标分辨率/帧率/编码后落盘，并回显 ffprobe 探针信息
+    （时长/分辨率/帧率/有无音轨/编码）。
+
+    - ``kind``：``video``（→ ``{scene_i}/video.mp4``）或 ``image``（→ ``{scene_i}/ref.png``）；
+    - ``scene_map``：可选 JSON，``{"1":"scene_0"}`` 显式指定映射；缺省按文件名序号/上传顺序。
+
+    仅允许在任务暂停或未运行时导入（运行中返回 409）。
+    """
+    if kind not in ("image", "video"):
+        raise HTTPException(status_code=422, detail=translate("validation.import_kind_invalid"))
+    if not files:
+        raise HTTPException(status_code=400, detail=translate("artifacts.import_no_files"))
+
+    if task_id in app_state.active_pipelines:
+        pipeline = app_state.active_pipelines[task_id]
+        if not pipeline._stop_event.is_set():
+            raise HTTPException(status_code=409, detail="Task is running, please stop/pause it first")
+
+    dir_name = helpers.find_dir_name(task_id)
+    tm = TaskManager(task_id, dir_name=dir_name)
+    state = tm.load()
+    if not state:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    mapping: dict = {}
+    if scene_map.strip():
+        try:
+            mapping = json.loads(scene_map)
+        except ValueError:
+            raise HTTPException(status_code=422, detail=translate("validation.import_scene_map_invalid"))
+        if not isinstance(mapping, dict):
+            raise HTTPException(status_code=422, detail=translate("validation.import_scene_map_invalid"))
+
+    task_type = str(getattr(state.task_type, "value", state.task_type))
+    width = int(getattr(state, "video_width", 0) or 0)
+    height = int(getattr(state, "video_height", 0) or 0)
+    scene_count = int(getattr(state, "scene_count", 0) or 0) or len(
+        getattr(state, "scenes", None) or []
+    )
+    real_task_dir = os.path.realpath(tm.task_dir)
+
+    results: list[dict] = []
+    refs = list(getattr(state, "scene_reference_images", []) or [])
+    refs_dirty = False
+
+    for pos, upload in enumerate(files):
+        filename = os.path.basename(upload.filename or f"upload_{pos}")
+        entry: dict = {"filename": filename, "target": "", "ok": False, "error": "", "probe": None}
+        try:
+            relpath = _resolve_scene_target(task_type, kind, mapping, filename, pos, scene_count)
+            abs_path = os.path.realpath(os.path.join(tm.task_dir, relpath))
+            if not abs_path.startswith(real_task_dir + os.sep):
+                raise ValueError("Access denied")
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+
+            content = await upload.read()
+            fd, tmp_path = tempfile.mkstemp(suffix=os.path.splitext(filename)[1] or ".bin")
+            try:
+                os.write(fd, content)
+                os.close(fd)
+                if kind == "video":
+                    await asyncio.to_thread(normalize_external_video, tmp_path, abs_path, width, height)
+                else:
+                    await asyncio.to_thread(normalize_external_image, tmp_path, abs_path, width, height)
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+            entry["ok"] = True
+            entry["target"] = relpath
+            entry["probe"] = await asyncio.to_thread(probe_media, abs_path)
+
+            # 分镜参考图（creative）：登记到 scene_reference_images，
+            # 使流水线在该场景以导入图为参考（跳过 AI 分镜图生成）。
+            if kind == "image" and task_type == "creative":
+                while len(refs) < pos + 1:
+                    refs.append("")
+                refs[pos] = abs_path
+                refs_dirty = True
+        except Exception as e:  # noqa: BLE001 — 逐文件隔离，单个失败不影响其余
+            entry["error"] = str(e)
+            logger.warning("[External] Import failed for %s: %s", safe_log(filename), e)
+        results.append(entry)
+
+    if refs_dirty:
+        state.scene_reference_images = refs
+        tm.update_state(scene_reference_images=refs)
+
+    write_checkpoint_manifest(state, tm.task_dir)
+
+    imported = sum(1 for r in results if r["ok"])
+    failed = len(results) - imported
+    logger.info("[External] Imported %d/%d %s artifacts for task %s",
+                imported, len(results), kind, safe_log(task_id))
+    return {
+        "ok": imported > 0,
+        "task_id": task_id,
+        "kind": kind,
+        "results": results,
+        "imported": imported,
+        "failed": failed,
+    }
+
+
+@router.get("/api/tasks/{task_id}/artifacts/probe")
+async def probe_task_artifact(task_id: str, relpath: str):
+    """单文件探针（v7.6）：返回时长/分辨率/帧率/有无音轨/编码。
+
+    ``relpath`` 为相对于任务目录的路径，经 ``safe_join`` 防路径穿越。
+    """
+    dir_name = helpers.find_dir_name(task_id)
+    tm = TaskManager(task_id, dir_name=dir_name)
+    state = tm.load()
+    if not state:
+        raise HTTPException(status_code=404, detail="Task not found")
+    try:
+        abs_path = safe_join(tm.task_dir, relpath)
+    except UnsafePathError:
+        raise HTTPException(status_code=404, detail=translate("artifacts.probe_missing"))
+    if not os.path.isfile(abs_path):
+        raise HTTPException(status_code=404, detail=translate("artifacts.probe_missing"))
+    info = await asyncio.to_thread(probe_media, abs_path)
+    return {"ok": True, "relpath": relpath, **info}
+
+
+def _validate_external_videos(state) -> None:
+    """外部素材模式确认 ``videos`` 检查点前的磁盘校验（v7.6）。
+
+    逐个场景按 :func:`_resolve_scene_target` 算出期望视频的相对路径，校验文件
+    已导入；任一缺失即抛 ``HTTPException(422)``，避免「未导入却被放行」。
+    视频是否含音轨由用户自行负责，不在此拦截。
+
+    Args:
+        state: 任务状态（含 ``manual_config`` / ``scene_count`` / ``scenes``）。
+
+    Raises:
+        HTTPException: 有场景视频缺失（422）。
+    """
+    mc = getattr(state, "manual_config", None)
+    if not mc or getattr(mc, "execution_mode", "auto") != "external":
+        return
+
+    scene_count = int(getattr(state, "scene_count", 0) or 0) or len(
+        getattr(state, "scenes", None) or []
+    )
+    if scene_count <= 0:
+        return
+
+    task_type = getattr(getattr(state, "task_type", None), "value", "") or str(
+        getattr(state, "task_type", "")
+    )
+    tm = TaskManager(state.task_id, dir_name=helpers.find_dir_name(state.task_id))
+
+    relpaths: list[str] = []
+    seen: set[str] = set()
+    for i in range(scene_count):
+        rel = _resolve_scene_target(task_type, "video", {}, "", i)
+        if rel not in seen:
+            seen.add(rel)
+            relpaths.append(rel)
+
+    missing = [
+        i + 1 for i, rel in enumerate(relpaths)
+        if not os.path.isfile(os.path.join(tm.task_dir, rel))
+    ]
+    ui_lang = getattr(state, "ui_language", "") or None
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=translate(
+                "checkpoint.approve.missing_videos",
+                ui_lang,
+                scenes=", ".join(str(n) for n in missing),
+            ),
+        )
+
+
 @router.post("/api/tasks/{task_id}/checkpoints/{checkpoint}/approve")
 async def approve_checkpoint(task_id: str, checkpoint: str,
                              modified_artifact_ids: str = Form(""),
@@ -512,6 +886,10 @@ async def approve_checkpoint(task_id: str, checkpoint: str,
         return {"ok": True, "checkpoint": checkpoint, "confirmed": False, **plan.to_dict()}
 
     # ── 确认落盘 ──
+    # v7.6 外部素材模式：确认 videos 检查点前先校验素材已导入（缺失 → 422）
+    if checkpoint == "videos":
+        _validate_external_videos(state)
+
     # 1. 删除受影响产物文件 + 应用级联计划到 state
     deleted_files: list[str] = []
     real_task_dir = os.path.realpath(tm.task_dir)
