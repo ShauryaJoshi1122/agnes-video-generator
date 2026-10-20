@@ -38,6 +38,11 @@ class Provider:
         notes: 能力限制提示兜底（前端优先 ``notes_key``）。
         notes_key: i18n key。
         url: 工具官网链接（前端「打开工具」按钮）。
+        experimental: 是否处于**试验阶段**——前端据此展示「试验中」气泡
+            （创建面板的工具下拉 / 检查点协作卡片）。
+        guide_path: 官网使用说明页面路径（如 ``/guides/jimeng-workflow``，
+            **只存路径**：官网强制语言前缀，由前端按当前 UI 语言拼接）。
+        faq_path: 官网常见问题页面路径（同上，只存路径）。
     """
 
     id: str
@@ -50,6 +55,9 @@ class Provider:
     name_key: str = ""
     notes_key: str = ""
     url: str = ""
+    experimental: bool = False
+    guide_path: str = ""
+    faq_path: str = ""
 
 
 _JIMENG_PROMPTS: Dict[str, str] = {
@@ -136,6 +144,11 @@ PROVIDERS: Dict[str, Provider] = {
         notes="分镜视频档位为 5s/10s；导出的 mp4 必须保留音轨。",
         notes_key="providers.jimeng.notes",
         url="https://jimeng.jianying.com/",
+        # 即梦协作（外部素材模式）自 v7.6 起提供，仍在打磨中 → 前端展示「试验中」气泡
+        experimental=True,
+        # 官网新增的说明页（guides/jimeng-workflow / faq/jimeng，22 语言已上线）
+        guide_path="/guides/jimeng-workflow",
+        faq_path="/faq/jimeng",
     ),
 }
 
@@ -208,6 +221,9 @@ def provider_public(pid: str, *, with_prompts: bool = False) -> dict:
         "notes": p.notes,
         "notes_key": p.notes_key,
         "url": p.url,
+        "experimental": p.experimental,
+        "guide_path": p.guide_path,
+        "faq_path": p.faq_path,
     }
     if with_prompts:
         data["checkpoint_prompts"] = dict(p.checkpoint_prompts)

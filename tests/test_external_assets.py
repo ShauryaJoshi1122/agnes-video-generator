@@ -86,6 +86,22 @@ def test_provider_public_excludes_prompt_templates():
     assert "checkpoint_prompts" in with_prompts
 
 
+def test_provider_public_exposes_experimental_and_doc_paths():
+    """「试验中」气泡与官网说明链接的数据来源：experimental + 只存路径的 doc 链接。"""
+    pub = providers.provider_public("jimeng")
+    assert pub["experimental"] is True
+    # 只存路径（官网强制语言前缀，由前端按 UI 语言拼接）
+    assert pub["guide_path"] == "/guides/jimeng-workflow"
+    assert pub["faq_path"] == "/faq/jimeng"
+    assert not pub["guide_path"].startswith("http")
+    assert not pub["faq_path"].startswith("http")
+    # 默认值：未声明即为非试验、无官网说明页
+    assert providers.Provider(
+        id="x", name="X", icon="", capabilities=[],
+        checkpoint_prompts={}, fill_guide={},
+    ).experimental is False
+
+
 # ═══════════════════════════════════════════════
 # _resolve_scene_target 映射
 # ═══════════════════════════════════════════════
@@ -354,6 +370,10 @@ def test_get_providers_endpoint(client):
     assert body["ok"] is True
     assert [p["id"] for p in body["providers"]] == ["jimeng"]
     assert "checkpoint_prompts" not in body["providers"][0]
+    # 前端「试验中」气泡 + 官网说明链接依赖这两个字段
+    assert body["providers"][0]["experimental"] is True
+    assert body["providers"][0]["guide_path"]
+    assert body["providers"][0]["faq_path"]
 
 
 def test_import_kind_validation(client):

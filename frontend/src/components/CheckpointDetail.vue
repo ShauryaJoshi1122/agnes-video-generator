@@ -7,6 +7,8 @@ import { useTasks } from '@/composables/useTasks'
 import { useProgress } from '@/composables/useProgress'
 import { useToast } from '@/composables/useToast'
 import { copyText } from '@/utils/clipboard'
+import ExperimentalBadge from './shared/ExperimentalBadge.vue'
+import { JIMENG_FAQ_PATH, JIMENG_GUIDE_PATH, siteUrl } from '@/utils/siteLinks'
 
 const props = defineProps<{ taskId: string; checkpoint: string }>()
 
@@ -70,6 +72,11 @@ const collabPrimary = computed(() => !!collabHint.value && props.checkpoint === 
 // 协作卡内提示词标题（如「给 Jimeng (Dreamina) 的视频生成提示词」）
 const collabPromptLabel = computed(() =>
   tf('checkpoint.collab.prompt_label', { name: collabProviderName.value }))
+// v7.6 即梦协作仍在试验阶段：气泡 + 官网说明/常见问题链接（路径由工具注册表下发，
+// 语言前缀按当前 UI 语言拼接，见 utils/siteLinks.ts）
+const collabExperimental = computed(() => !!collabProvider.value.experimental)
+const collabGuideHref = computed(() => siteUrl(collabProvider.value.guide_path || JIMENG_GUIDE_PATH))
+const collabFaqHref = computed(() => siteUrl(collabProvider.value.faq_path || JIMENG_FAQ_PATH))
 // 可批量导入的检查点：参考图 → image，视频片段 → video
 const importKind = computed(() => (props.checkpoint === 'references' ? 'image' : props.checkpoint === 'videos' ? 'video' : ''))
 const canImport = computed(() => !!importKind.value && !!collabHint.value)
@@ -409,7 +416,10 @@ function artLabel(a: any): string {
       </button>
       <!-- v7.6 外部素材模式：外部工具协作（仅 external_hint 非空时展示） -->
       <button v-if="collabHint" class="p-3 rounded-xl border text-left transition" :class="activeCard === 'collab' ? 'border-accent bg-accent/10' : 'border-rule bg-paper-2/30 hover:border-accent/40'" @click="activeCard = 'collab'">
-        <div class="text-sm font-medium text-ink-2">{{ collabProvider.icon }} {{ t('checkpoint.collab.title').replace('{name}', collabProvider.name || '') }}</div>
+        <div class="flex flex-wrap items-center gap-1.5 text-sm font-medium text-ink-2">
+          <span>{{ collabProvider.icon }} {{ t('checkpoint.collab.title').replace('{name}', collabProvider.name || '') }}</span>
+          <ExperimentalBadge v-if="collabExperimental" />
+        </div>
         <div class="text-xs text-muted mt-0.5">{{ collabProvider.name }}</div>
       </button>
     </div>
@@ -481,11 +491,25 @@ function artLabel(a: any): string {
     <div v-else-if="activeCard === 'collab' && collabHint" class="space-y-3">
       <div>
         <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
-          <label class="block text-xs text-muted">{{ collabPromptLabel }}</label>
-          <a v-if="collabProvider.url" :href="collabProvider.url" target="_blank" rel="noopener"
-             class="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 glass-input rounded-lg transition hover:border-accent/40 shrink-0">
-            🔗 {{ tf('checkpoint.collab.open_tool', { name: collabProviderName }) }}
-          </a>
+          <label class="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+            <span>{{ collabPromptLabel }}</span>
+            <ExperimentalBadge v-if="collabExperimental" />
+          </label>
+          <div class="flex flex-wrap items-center gap-2 shrink-0">
+            <!-- 官网新增的即梦说明与常见问题（含 503 处理），语言前缀随 UI 语言切换 -->
+            <a :href="collabGuideHref" target="_blank" rel="noopener"
+               class="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 glass-input rounded-lg transition hover:border-accent/40">
+              📖 {{ t('experimentalGuideLink') }}
+            </a>
+            <a :href="collabFaqHref" target="_blank" rel="noopener"
+               class="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 glass-input rounded-lg transition hover:border-accent/40">
+              ❓ {{ t('experimentalFaqLink') }}
+            </a>
+            <a v-if="collabProvider.url" :href="collabProvider.url" target="_blank" rel="noopener"
+               class="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 glass-input rounded-lg transition hover:border-accent/40">
+              🔗 {{ tf('checkpoint.collab.open_tool', { name: collabProviderName }) }}
+            </a>
+          </div>
         </div>
         <textarea rows="8" readonly class="w-full glass-input rounded-lg px-3 py-2 text-xs text-ink font-mono resize-y" :value="collabHint.prompt"></textarea>
         <button class="mt-2 text-xs px-4 py-2 bg-accent text-accent-ink rounded-lg transition" @click="copyCollabPrompt">

@@ -9,6 +9,8 @@ import CreativeForm from './forms/CreativeForm.vue'
 import ManuscriptForm from './forms/ManuscriptForm.vue'
 import AnchorForm from './forms/AnchorForm.vue'
 import PoetryForm from './forms/PoetryForm.vue'
+import ExperimentalBadge from './shared/ExperimentalBadge.vue'
+import { JIMENG_FAQ_PATH, JIMENG_GUIDE_PATH, siteUrl } from '@/utils/siteLinks'
 
 const { trackEvent } = useGa()
 
@@ -94,6 +96,15 @@ onMounted(async () => {
   }
 })
 
+// v7.6 即梦协作处于试验阶段：气泡与官网说明链接按所选工具的注册表元数据渲染
+// （注册表拉取失败时按默认工具即梦处理——后端同样回退 jimeng）
+const selectedProvider = computed<any>(() =>
+  appState.providers.find((p: any) => p.id === appState.providerSelected) || null,
+)
+const externalExperimental = computed(() => (selectedProvider.value ? !!selectedProvider.value.experimental : true))
+const providerGuideHref = computed(() => siteUrl(selectedProvider.value?.guide_path || JIMENG_GUIDE_PATH))
+const providerFaqHref = computed(() => siteUrl(selectedProvider.value?.faq_path || JIMENG_FAQ_PATH))
+
 function switchTaskType(type: string) {
   trackEvent('ui_action', { action: 'switch_task_type', type })
   appState.currentTaskType = type
@@ -143,15 +154,20 @@ function selectExecMode(mode: 'auto' | 'manual' | 'external') {
           >
             {{ t('execManual') }}
           </button>
-          <button
-            class="px-4 py-2 rounded-lg text-sm font-medium transition border"
-            :class="appState.execMode === 'external' ? 'bg-accent text-accent-ink border-accent' : 'bg-paper-2/50 border-rule text-ink-2 hover:border-accent/40'"
-            :disabled="!manualSupported"
-            :title="!manualSupported ? t('manualUnsupported') : ''"
-            @click="selectExecMode('external')"
-          >
-            {{ t('execMode.external') }}
-          </button>
+          <!-- v7.6 即梦协作仍在试验阶段：气泡放在按钮外侧，避免选中态（accent 底）
+               与气泡的琥珀色撞在一起看不清 -->
+          <span class="inline-flex items-center gap-1.5">
+            <button
+              class="px-4 py-2 rounded-lg text-sm font-medium transition border"
+              :class="appState.execMode === 'external' ? 'bg-accent text-accent-ink border-accent' : 'bg-paper-2/50 border-rule text-ink-2 hover:border-accent/40'"
+              :disabled="!manualSupported"
+              :title="!manualSupported ? t('manualUnsupported') : ''"
+              @click="selectExecMode('external')"
+            >
+              {{ t('execMode.external') }}
+            </button>
+            <ExperimentalBadge v-if="externalExperimental" />
+          </span>
         </div>
         <span class="text-xs text-muted">{{ t('execModeHint') }}</span>
       </div>
@@ -159,7 +175,10 @@ function selectExecMode(mode: 'auto' | 'manual' | 'external') {
       <!-- v7.6 外部素材模式：工具下拉 + 音频来源 + 提示 -->
       <div v-if="appState.execMode === 'external' && manualSupported" class="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
         <div>
-          <label class="block text-xs text-muted mb-1">{{ t('execMode.provider') }}</label>
+          <label class="flex items-center gap-1.5 text-xs text-muted mb-1">
+            {{ t('execMode.provider') }}
+            <ExperimentalBadge v-if="externalExperimental" />
+          </label>
           <select v-model="appState.providerSelected" class="glass-input rounded-lg px-3 py-2 text-sm text-ink min-w-48">
             <option v-for="p in appState.providers" :key="p.id" :value="p.id">{{ p.icon }} {{ p.name }}</option>
           </select>
@@ -191,6 +210,12 @@ function selectExecMode(mode: 'auto' | 'manual' | 'external') {
           </div>
         </div>
         <p class="text-xs text-muted max-w-2xl basis-full">{{ t('execMode.external_hint') }}</p>
+        <!-- 官网新增的即梦说明与常见问题（语言前缀随 UI 语言切换） -->
+        <div class="basis-full flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <a :href="providerGuideHref" target="_blank" rel="noopener" class="text-accent hover:text-ink transition-colors">📖 {{ t('experimentalGuideLink') }}</a>
+          <span class="text-ink/10 select-none">·</span>
+          <a :href="providerFaqHref" target="_blank" rel="noopener" class="text-accent hover:text-ink transition-colors">❓ {{ t('experimentalFaqLink') }}</a>
+        </div>
       </div>
 
       <!-- 手动模式：暂停点多选（PRD §6.1） -->

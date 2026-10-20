@@ -399,8 +399,12 @@ def _build_external_hint(state, checkpoint: str, working_dir: str):
     """构建外部素材模式检查点提示（v7.6）；非外部任务返回 None。
 
     Returns:
-        ``{provider:{id,name,name_key,icon}, prompt, fill_guide, notes, notes_key}``
+        ``{provider:{id,name,name_key,icon,url,experimental,guide_path,faq_path},
+        prompt, fill_guide, notes, notes_key}``
         或 None（非 external / 该工具未定义此检查点提示词）。
+
+    ``provider.experimental`` / ``guide_path`` / ``faq_path`` 驱动前端「试验中」
+    气泡与官网说明链接（路径不含语言前缀，由前端按 UI 语言拼接）。
     """
     mc = getattr(state, "manual_config", None)
     if mc is None or getattr(mc, "execution_mode", "auto") != "external":
@@ -426,6 +430,10 @@ def _build_external_hint(state, checkpoint: str, working_dir: str):
         "provider": {
             "id": p.id, "name": p.name, "name_key": p.name_key, "icon": p.icon,
             "url": p.url,
+            # 试验阶段标记 + 官网说明页路径（前端拼上 UI 语言前缀后渲染）
+            "experimental": p.experimental,
+            "guide_path": p.guide_path,
+            "faq_path": p.faq_path,
         },
         "prompt": prompt,
         "fill_guide": p.fill_guide.get(checkpoint, ""),
