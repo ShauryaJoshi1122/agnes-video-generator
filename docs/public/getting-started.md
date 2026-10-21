@@ -33,10 +33,9 @@ Get a free API key from [Agnes AI](https://platform.agnes-ai.com), then choose o
 # Way 1: Environment variable
 export AGNES_API_KEY="your-api-key"
 
-# Way 2: Via API (same as entering it in the Web UI)
+# Way 2: Via API (same as entering it in the Web UI; the endpoint takes form data)
 curl -X POST http://localhost:8765/api/config \
-  -H "Content-Type: application/json" \
-  -d '{"api_key": "your-api-key"}'
+  -F 'api_key=your-api-key'
 ```
 
 > **💡 Prefer a config file?** Copy the bundled template [`.env.example`](../../.env.example) to `.env` in the project root and fill in your key. It documents every supported variable with its default — multi-key rotation, rate limits, port, model overrides:
@@ -109,13 +108,27 @@ npm install -g free-short-video
 free-short-video          # short alias: fsv
 ```
 
-On first run the launcher automatically creates a local virtual environment, installs Python dependencies, wires up a bundled `ffmpeg` (via `imageio-ffmpeg`, so no system ffmpeg needed), starts the server on `http://localhost:8765`, and opens your browser. Pass your key through the environment or set it later in the Web UI:
+On first run the launcher automatically creates a virtual environment, installs Python dependencies, wires up a bundled `ffmpeg` (via `imageio-ffmpeg`, so no system ffmpeg needed), starts the server on `http://localhost:8765`, and opens your browser. Pass your key through the environment or set it later in the Web UI:
 
 ```bash
 AGNES_API_KEY=<your-key> npx free-short-video
 ```
 
-Options: `--port <n>`, `--host <h>` (use `0.0.0.0` for LAN access), `--no-open`.
+**Everything mutable lives in one data root** — `~/.agnes-video` by default, override with `AGNES_HOME`
+(or `--home <dir>`): `venv/`, `config/`, `workspace/`, `logs/`. Keeping it out of the package directory
+is what makes the install durable: `npx` unpacks into its own cache, so a cache clean or a version bump
+would otherwise throw away the virtualenv and re-download every Python dependency. Later runs reuse it,
+and `pip` only runs again when `requirements.txt` actually changed (sha256 fingerprint).
+
+Options: `--port <n>`, `--host <h>` (use `0.0.0.0` for LAN access), `--no-open`,
+`--detach` (start in the background, exit once the service answers), `--json` (machine-readable result,
+implies `--detach`), `--print-paths` (show where the data root pieces live), `--home <dir>`.
+
+```bash
+# Script / agent friendly: start in the background and get a JSON result
+npx free-short-video --detach --json --no-open
+# {"ok":true,"ready":true,"pid":4242,"base":"http://127.0.0.1:8765","home":"/home/you/.agnes-video",...}
+```
 
 ### ffmpeg: bundled by default, or install your own
 

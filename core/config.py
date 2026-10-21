@@ -706,7 +706,15 @@ DEFAULT_WORKSPACE_NAME = "默认空间"
 
 
 def _default_working_dir() -> str:
-    """默认工作目录（项目根目录下的 .working_dir）。"""
+    """默认工作目录。
+
+    优先级：``AGNES_WORKING_DIR`` 环境变量 > 项目根目录下的 ``.working_dir``。
+    环境变量用于把产物挪出安装目录（npm/npx 部署时包目录位于缓存内，缓存清理
+    会带走工作区），由 ``bin/cli.js`` 在 ``AGNES_HOME`` 模式下自动注入。
+    """
+    override = os.environ.get("AGNES_WORKING_DIR", "").strip()
+    if override:
+        return os.path.abspath(os.path.expanduser(override))
     return os.path.join(_PROJECT_ROOT, ".working_dir")
 
 

@@ -13,6 +13,12 @@ and you can stop at any of them:
 | **2. Install the companion skill set** | The agent does not have to work the project out first: three ready-made skills cover using, debugging and contributing | One command (below) |
 | **3. Distribute with flint** | Every agent you use gets the same skills, and they stay in sync | One command (below) |
 
+Level 2 has one property worth spelling out: **the skill installs this project on demand**. Once the
+skills are present, the agent runs `scripts/bootstrap.py install`, which puts the service under
+`~/.agnes-video` (override with `AGNES_HOME`), keeps its own virtualenv there, starts it on
+`localhost:8765`, and re-runs nothing on the next use — no clone, no repeated `pip install`, and no
+data left inside a package cache.
+
 ---
 
 ## Level 1 — Point your agent at this repository

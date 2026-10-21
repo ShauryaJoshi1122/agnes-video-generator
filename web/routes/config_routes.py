@@ -75,6 +75,8 @@ async def get_config():
     data = {
         "app_version": APP_VERSION,
         "api_key": key[:8] + "..." if key else "",
+        # 机器可读的「是否已配置 key」：调用方无需解析掩码串（agent / 脚本用）
+        "has_key": bool(key),
         "source": source,
         "can_clear": source == "config",
         "workspaces": get_workspaces(),
