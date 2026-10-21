@@ -131,6 +131,24 @@ function ensureDirs() {
   }
 }
 
+/**
+ * 老版本把配置放在包目录（.agnes_config）。改用数据根后，首次运行把旧配置
+ * 复制过去，避免用户因为"换了目录"而丢掉已配置的 API Key 与偏好。
+ * 只做一次（新目录已有 config.json 就跳过），失败不阻断启动。
+ */
+function migrateLegacyConfig() {
+  const legacyDir = path.join(PKG_ROOT, '.agnes_config');
+  const legacyFile = path.join(legacyDir, 'config.json');
+  const target = path.join(CONFIG_DIR, 'config.json');
+  if (fs.existsSync(target) || !fs.existsSync(legacyFile)) return;
+  try {
+    fs.cpSync(legacyDir, CONFIG_DIR, { recursive: true });
+    console.log(`✓ Migrated existing config from ${legacyDir}`);
+  } catch (_) {
+    console.log('⚠ Could not migrate the previous config; the key can be re-entered in the Web UI');
+  }
+}
+
 if (printPaths) {
   const payload = {
     home: HOME,
@@ -212,6 +230,7 @@ const venvPip = venvBin('pip');
 
 // ── 2. venv + deps ─────────────────────────────────────────────────────────
 ensureDirs();
+migrateLegacyConfig();
 if (!fs.existsSync(venvPython)) {
   console.log('[1/3] Creating virtual environment...');
   run(`"${py}" -m venv "${VENV_DIR}"`);
