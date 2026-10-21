@@ -132,6 +132,69 @@ def _render_watermark_png(
         return None
 
 
+def _fallback_to_original(input_path: str, output_path: str) -> None:
+    """水印失败兜底：原样拷贝输入视频，保证调用方总能拿到可播放文件。"""
+    import shutil
+    try:
+        shutil.copy2(input_path, output_path)
+    except OSError as e:
+        logger.error(f"[Watermark] Fallback copy failed: {e}")
+
+
+def _overlay_watermark(
+    input_path: str,
+    output_path: str,
+    video_width: int,
+    video_height: int,
+    language: str,
+    font_path: str,
+) -> bool:
+    """渲染水印 PNG 并用 ffmpeg overlay 合成（失败返回 False，由调用方兜底拷贝）。"""
+    wm_png_fd, wm_png_path = tempfile.mkstemp(suffix=".png", prefix="watermark_")
+    os.close(wm_png_fd)
+    ok = False
+    try:
+        layout = _render_watermark_png(
+            wm_png_path, video_width, video_height, language, font_path
+        )
+        if layout is None:
+            logger.error("[Watermark] Failed to render watermark PNG, copying original")
+        else:
+            # ffmpeg overlay: 将水印 PNG 叠加到视频上，无损流式拷贝
+            cmd = [
+                resolve_binary("ffmpeg"), "-y",
+                "-i", input_path,
+                "-i", wm_png_path,
+                "-filter_complex", f"[0:v][1:v]overlay={layout.pos_x}:{layout.pos_y}[v]",
+                "-map", "[v]",
+                "-map", "0:a?",  # 保留原音频
+                "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+                "-c:a", "copy",
+                output_path,
+            ]
+
+            logger.debug(f"[Watermark] ffmpeg cmd: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
+            if result.returncode != 0:
+                logger.error(f"[Watermark] ffmpeg failed (rc={result.returncode}): "
+                             f"{result.stderr[:500]}")
+            else:
+                logger.info(f"[Watermark] Complete: {os.path.basename(output_path)}")
+                ok = True
+    except subprocess.TimeoutExpired:
+        logger.error("[Watermark] ffmpeg timed out")
+    except Exception as e:
+        logger.error(f"[Watermark] Failed: {e}")
+    finally:
+        if os.path.exists(wm_png_path):
+            try:
+                os.remove(wm_png_path)
+            except OSError:
+                pass
+    return ok
+
+
 def add_watermark(
     input_path: str,
     output_path: str,
@@ -144,83 +207,29 @@ def add_watermark(
 
     先生成水印 PNG（moviepy TextClip，一帧而已），
     再用 ffmpeg overlay 滤镜流式合成，不加载全视频到内存。
+    任一步失败都回退为「原样拷贝」，返回值 False 表示未加水印。
     """
+    ok = False
     if not os.path.exists(input_path):
         logger.error(f"[Watermark] Input not found: {input_path}")
-        return False
+    else:
+        if video_width is None or video_height is None:
+            video_width, video_height = _get_video_dimensions(input_path)
+        if font_path is None:
+            font_path = resolve_font_path("STHeitiMedium.ttc")
 
-    if video_width is None or video_height is None:
-        vw, vh = _get_video_dimensions(input_path)
-        if vw is None or vh is None:
+        if video_width is None or video_height is None:
             logger.error(f"[Watermark] Cannot detect video dimensions: {input_path}")
-            import shutil
-            shutil.copy2(input_path, output_path)
-            return False
-        video_width, video_height = vw, vh
-
-    if font_path is None:
-        font_path = resolve_font_path("STHeitiMedium.ttc")
-    if not os.path.exists(font_path):
-        logger.warning(f"[Watermark] Font not found: {font_path}, copying original")
-        import shutil
-        shutil.copy2(input_path, output_path)
-        return False
-
-    logger.info(f"[Watermark] Processing {os.path.basename(input_path)} "
-                f"({video_width}x{video_height}, lang={language}) via ffmpeg overlay")
-
-    # 生成水印 PNG（内存友好 — 仅一帧）
-    wm_png_fd, wm_png_path = tempfile.mkstemp(suffix=".png", prefix="watermark_")
-    os.close(wm_png_fd)
-    try:
-        layout = _render_watermark_png(
-            wm_png_path, video_width, video_height, language, font_path
-        )
-        if layout is None:
-            logger.error("[Watermark] Failed to render watermark PNG, copying original")
-            import shutil
-            shutil.copy2(input_path, output_path)
-            return False
-
-        # ffmpeg overlay: 将水印 PNG 叠加到视频上，无损流式拷贝
-        cmd = [
-            resolve_binary("ffmpeg"), "-y",
-            "-i", input_path,
-            "-i", wm_png_path,
-            "-filter_complex", f"[0:v][1:v]overlay={layout.pos_x}:{layout.pos_y}[v]",
-            "-map", "[v]",
-            "-map", "0:a?",  # 保留原音频
-            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
-            "-c:a", "copy",
-            output_path,
-        ]
-
-        logger.debug(f"[Watermark] ffmpeg cmd: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-
-        if result.returncode != 0:
-            logger.error(f"[Watermark] ffmpeg failed (rc={result.returncode}): "
-                         f"{result.stderr[:500]}")
-            import shutil
-            shutil.copy2(input_path, output_path)
-            return False
-
-        logger.info(f"[Watermark] Complete: {os.path.basename(output_path)}")
-        return True
-
-    except subprocess.TimeoutExpired:
-        logger.error("[Watermark] ffmpeg timed out")
-        import shutil
-        shutil.copy2(input_path, output_path)
-        return False
-    except Exception as e:
-        logger.error(f"[Watermark] Failed: {e}")
-        import shutil
-        shutil.copy2(input_path, output_path)
-        return False
-    finally:
-        if os.path.exists(wm_png_path):
-            try:
-                os.remove(wm_png_path)
-            except OSError:
-                pass
+            _fallback_to_original(input_path, output_path)
+        elif not os.path.exists(font_path):
+            logger.warning(f"[Watermark] Font not found: {font_path}, copying original")
+            _fallback_to_original(input_path, output_path)
+        else:
+            logger.info(f"[Watermark] Processing {os.path.basename(input_path)} "
+                        f"({video_width}x{video_height}, lang={language}) via ffmpeg overlay")
+            ok = _overlay_watermark(
+                input_path, output_path, video_width, video_height, language, font_path,
+            )
+            if not ok:
+                _fallback_to_original(input_path, output_path)
+    return ok
