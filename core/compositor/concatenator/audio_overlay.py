@@ -345,6 +345,7 @@ class AudioOverlayMixin:
         Returns:
             True=成功产出；False=失败（调用方降级为仅拼接）。
         """
+        ass_path, fonts_dir = "", ""
         try:
             video_w, video_h = AudioOverlayMixin._get_video_size(concat_path)
             ass_path, fonts_dir = AudioOverlayMixin._srt_to_ass(
@@ -352,45 +353,46 @@ class AudioOverlayMixin:
             )
         except Exception as e:
             logger.warning(f"[Compositor] SRT→ASS conversion failed: {e}")
-            return False
-        if not ass_path:
-            return False
 
+        ok = False
         try:
-            esc_path = AudioOverlayMixin._escape_filter_path(ass_path)
-            esc_dir = AudioOverlayMixin._escape_filter_path(fonts_dir or "")
-            v_chain = f"[0:v]subtitles={esc_path}:fontsdir='{esc_dir}'[v]"
-            # 音轨优先 ``-c:a copy`` 原样透传；容器/编码不兼容时回退重编码音频
-            # （仅音频重编码，视频本就因烧字幕需重编码）。
-            for audio_args, mode in (
-                (["-c:a", "copy"], "copy"),
-                (["-c:a", _AUDIO_CODEC, "-b:a", _AUDIO_BITRATE, "-ar", "44100", "-ac", "2"], "aac"),
-            ):
-                cmd = [
-                    resolve_binary("ffmpeg"), "-y",
-                    "-i", concat_path,
-                    "-filter_complex", v_chain,
-                    "-map", "[v]", "-map", "0:a?",
-                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast",
-                    *audio_args,
-                    output_path,
-                ]
-                try:
-                    VideoConcatenator._run_ffmpeg(
-                        cmd, desc=f"burn subtitle (keep original audio, {mode})",
-                    )
-                    return True
-                except RuntimeError as e:
-                    logger.warning(
-                        f"[Compositor] keep-audio subtitle burn ({mode}) failed: {e}"
-                    )
-            return False
+            if ass_path:
+                esc_path = AudioOverlayMixin._escape_filter_path(ass_path)
+                esc_dir = AudioOverlayMixin._escape_filter_path(fonts_dir or "")
+                v_chain = f"[0:v]subtitles={esc_path}:fontsdir='{esc_dir}'[v]"
+                # 音轨优先 ``-c:a copy`` 原样透传；容器/编码不兼容时回退重编码音频
+                # （仅音频重编码，视频本就因烧字幕需重编码）。
+                for audio_args, mode in (
+                    (["-c:a", "copy"], "copy"),
+                    (["-c:a", _AUDIO_CODEC, "-b:a", _AUDIO_BITRATE, "-ar", "44100", "-ac", "2"],
+                     "aac"),
+                ):
+                    cmd = [
+                        resolve_binary("ffmpeg"), "-y",
+                        "-i", concat_path,
+                        "-filter_complex", v_chain,
+                        "-map", "[v]", "-map", "0:a?",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast",
+                        *audio_args,
+                        output_path,
+                    ]
+                    try:
+                        VideoConcatenator._run_ffmpeg(
+                            cmd, desc=f"burn subtitle (keep original audio, {mode})",
+                        )
+                        ok = True
+                        break
+                    except RuntimeError as e:
+                        logger.warning(
+                            f"[Compositor] keep-audio subtitle burn ({mode}) failed: {e}"
+                        )
         finally:
-            if os.path.exists(ass_path):
+            if ass_path and os.path.exists(ass_path):
                 try:
                     os.remove(ass_path)
                 except OSError:
                     pass
+        return ok
 
     @staticmethod
     def concat_scenes_keep_audio(

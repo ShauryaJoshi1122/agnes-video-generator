@@ -758,8 +758,12 @@ async def import_task_artifacts(
                 refs[pos] = abs_path
                 refs_dirty = True
         except Exception as e:  # noqa: BLE001 — 逐文件隔离，单个失败不影响其余
-            entry["error"] = str(e)
-            logger.warning("[External] Import failed for %s: %s", safe_log(filename), e)
+            # 异常原文只进服务端日志（含绝对路径/ffmpeg 命令等实现细节），
+            # 回给前端的固定为多语言通用文案（CWE-209 / CodeQL py/stack-trace-exposure）
+            entry["error"] = translate("artifacts.import_failed")
+            logger.warning(
+                "[External] Import failed for %s: %s", safe_log(filename), safe_log(e),
+            )
         results.append(entry)
 
     if refs_dirty:
@@ -771,7 +775,7 @@ async def import_task_artifacts(
     imported = sum(1 for r in results if r["ok"])
     failed = len(results) - imported
     logger.info("[External] Imported %d/%d %s artifacts for task %s",
-                imported, len(results), kind, safe_log(task_id))
+                imported, len(results), safe_log(kind), safe_log(task_id))
     return {
         "ok": imported > 0,
         "task_id": task_id,

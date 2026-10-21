@@ -814,6 +814,11 @@ CATALOG: Dict[str, Dict[str, str]] = {
         "zh": "文件不存在",
         "en": "File not found",
     },
+    "artifacts.import_failed": {
+        "zh": "导入失败，请检查文件格式后重试（详细原因见服务端日志）",
+        "en": "Import failed, please check the file format and retry "
+              "(detailed reason is in the server log)",
+    },
     "validation.pause_points_not_list": {
         "zh": "pause_points 必须为 JSON 数组",
         "en": "pause_points must be a JSON array",
