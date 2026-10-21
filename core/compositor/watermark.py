@@ -138,7 +138,7 @@ def _fallback_to_original(input_path: str, output_path: str) -> None:
     try:
         shutil.copy2(input_path, output_path)
     except OSError as e:
-        logger.error(f"[Watermark] Fallback copy failed: {e}")
+        logger.exception(f"[Watermark] Fallback copy failed: {e}")
 
 
 def _overlay_watermark(
@@ -185,7 +185,7 @@ def _overlay_watermark(
     except subprocess.TimeoutExpired:
         logger.error("[Watermark] ffmpeg timed out")
     except Exception as e:
-        logger.error(f"[Watermark] Failed: {e}")
+        logger.exception(f"[Watermark] Failed: {e}")
     finally:
         if os.path.exists(wm_png_path):
             try:
