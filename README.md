@@ -73,37 +73,49 @@ schema.org structured data for SEO/GEO indexing. GitHub does not execute this sc
 |---------|-----------|----------|------|
 | **[Agnes Video Generator](https://github.com/lcy362/agnes-video-generator)** (this project) | **Download & run locally** | **More powerful** — TTS narration, auto subtitles, digital anchor, image-to-video, keyframes animation, manuscript-to-video, checkpoint resume & more | [GitHub](https://github.com/lcy362/agnes-video-generator) |
 | **[FreeShortVideoStudio](https://github.com/lcy362/free-short-video-studio)** | **Fully online, in the browser** | Lightweight, zero install — no setup at all, **features under active construction** | [video.lichuanyang.top/studio](https://video.lichuanyang.top/studio) · [GitHub](https://github.com/lcy362/free-short-video-studio) |
-| **[Agnes Video Generator](https://github.com/lcy362/agnes-video-generator)** — **agent-ready** | **Driven by an AI coding agent** | **Least effort** — ships [`AGENTS.md`](AGENTS.md) plus a companion skill set (usage / troubleshoot / contrib): the agent installs the project, generates the video and debugs failures itself | [Agent guide](docs/public/agent-operations.md) · [Flint](https://github.com/lcy362/flint) |
+| **[Agnes Video Generator](https://github.com/lcy362/agnes-video-generator)** — **agent-ready** | **Driven by an AI coding agent** | **Least effort** — install one skill set (usage / troubleshoot / contrib): the agent installs the service, generates the video and debugs failures itself, no clone needed | [Agent guide](docs/public/agent-operations.md) · [Flint](https://github.com/lcy362/flint) |
 
 ## 🤖 Or Let an AI Agent Drive It
 
-This project ships an [`AGENTS.md`](AGENTS.md) written for AI coding assistants, so an agent can install it, generate videos and debug failures after reading one document. Clone the repo, then tell your agent:
-
-> "Read the AGENTS.md in this project, install dependencies, configure the API key `<your-key>`, and start the server."
-
-Then ask it to prove the setup with `"Run the deployment verification checks."` — it executes the four-layer checklist (connectivity → static analysis → endpoint tests → features) and reports each result.
-
-**Want your agent to skip the learning step?** Install the companion skill set — three ready-made skills (**usage**: deploy, pick a mode, submit and watch a task, edit artifacts at Manual Mode checkpoints; **troubleshoot**: find out why a run failed; **contrib**: change the code, get the PR through CI) plus small scripts for task control, deployment verification, evidence collection, media checks and the local CI gate:
-
-**[lcy362/agnes-video-generator-skills](https://github.com/lcy362/agnes-video-generator-skills)**
-
-Clone the repository first:
+Install one skill set, then describe the result you want. The agent installs the service, makes the
+video and debugs failures itself — **you never clone this repository**.
 
 ```bash
 git clone https://github.com/lcy362/agnes-video-generator-skills.git
-```
-
-**Recommended — let [flint](https://github.com/lcy362/flint) install and distribute it.** flint is a local-first, open-source skills manager that keeps your skills in one place and deploys them into any agent or project directory by symlink or copy. It works on local sources only — it never clones anything for you — so you register the directory you just cloned, and the three skills appear in front of every agent you use:
-
-```bash
 npx flint-skills-hub     # Sources → add the cloned directory (flint reads its skills/ subdirectory)
 ```
+
+[**flint**](https://github.com/lcy362/flint) is a local-first, open-source skills manager: it deploys
+the skills into any agent directory (Claude Code, Cursor, Codex, TRAE and more) by symlink or copy,
+with no cloud, no account and no telemetry. It works on local sources only — it never clones anything
+for you — so you register the directory you just cloned.
 
 **Or copy it in by hand** — no flint required, but you repeat it for every project and every new agent:
 
 ```bash
 cp -R agnes-video-generator-skills/skills/* <project>/.agents/skills/     # any agent that reads .agents/skills
 ```
+
+**The skill installs the service too.** `agnes-video-usage` runs `scripts/bootstrap.py install`, which
+puts the service under `~/.agnes-video` (override with `AGNES_HOME`), keeps its own virtualenv there,
+starts it on `localhost:8765`, and re-runs nothing on the next use. Config, workspace and finished
+videos live in that same data root.
+
+**Then ask for outcomes** — no commands, no flags:
+
+> "Make a creative long video about the Voyager probes, with narration and subtitles."
+
+> "My task `4de1bcd26fda` failed — find out why and tell me if it is worth fixing."
+
+> "Take my finished task, improve the storyboard prompts, and regenerate only the affected scenes."
+
+Three skills cover the three things you are likely to want:
+
+| Skill | Use it when you want to |
+|-------|-------------------------|
+| `agnes-video-usage` | Install and start the service, pick a mode, submit and watch a task, edit artifacts at Manual Mode checkpoints |
+| `agnes-video-troubleshoot` | Find out why a run failed, and whether it is worth fixing |
+| `agnes-video-contrib` | Change the project's code and get the PR through CI |
 
 Full guide: **[Let an AI Agent Operate This Project](docs/public/agent-operations.md)**.
 
@@ -191,7 +203,7 @@ Full walkthrough: [Getting Started → Configure API Key](docs/public/getting-st
 
 - **[Features](docs/public/features.md)** — Creation modes, the completely free AI model chain, AI narration & smart subtitles, flexible creative controls, production-grade reliability, and the multilingual Web UI.
 - **[Getting Started](docs/public/getting-started.md)** — Install and deploy in 4 ways: Manual (`start.sh`), Docker, npm (`npx free-short-video`), or AI-Agent assisted.
-- **[AI Agent Operations](docs/public/agent-operations.md)** — Three levels of agent-driven operation: hand your agent `AGENTS.md`, install the companion skill set, or distribute it to every agent with flint.
+- **[AI Agent Operations](docs/public/agent-operations.md)** — How to drive this project with a coding agent: install the companion skill set once, then ask for outcomes — the agent deploys the service, generates videos and debugs failures.
 - **[Usage Guide](docs/public/usage.md)** — Configure your API key, pick a video mode, resume from checkpoints, the three chaining modes, and logs & output layout.
 - **[Architecture](docs/public/architecture.md)** — Project structure and tech stack.
 - **[API Reference](docs/public/api.md)** — Full REST endpoint list (progress via polling, no WebSocket).

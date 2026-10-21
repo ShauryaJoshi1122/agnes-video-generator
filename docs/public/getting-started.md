@@ -155,62 +155,47 @@ ffmpeg -version
 
 ## Option D: AI Agent Assisted Setup
 
-This project is designed for AI coding assistants. There are three levels to it — stop at whichever
-one is enough. The authoritative description is
+This project is built to be operated by an AI coding assistant. Install the companion skill set once,
+then describe the outcome you want instead of running commands. The authoritative description is
 **[Let an AI Agent Operate This Project](agent-operations.md)**.
 
-**Level 1 — point your agent at this repository.** First, download the code and prepare your API key:
-
-```bash
-git clone https://github.com/lcy362/agnes-video-generator.git
-cd agnes-video-generator
-```
-
-Then tell your agent:
-
-> "Read the AGENTS.md in this project, install dependencies, configure the API key `<your-key>`, and start the server."
-
-The agent will read `AGENTS.md` (a comprehensive deployment guide) and handle: environment checks (Python 3.10+, ffmpeg), `pip install`, server launch, and API key configuration. After startup, you can also ask the agent to verify the deployment:
-
-> "Run the deployment verification checks."
-
-The agent will execute the 4-layer checklist from `AGENTS.md` (connectivity → static analysis → endpoint testing → subtitle feature) and report results.
-
-**Level 2 — install the companion skill set.** `AGENTS.md` describes how to *change* this project;
-the companion skill set covers *operating* it, so the agent doesn't have to work the project out
-first. It ships three skills — `agnes-video-usage` (deploy, pick a mode, submit and watch a task,
-edit artifacts at Manual Mode checkpoints), `agnes-video-troubleshoot` (find out why a run failed)
-and `agnes-video-contrib` (change the code and get the PR through CI) — plus small scripts for task
-control, deployment verification, evidence collection, media checks and the local CI gate:
-
-> **[lcy362/agnes-video-generator-skills](https://github.com/lcy362/agnes-video-generator-skills)**
-
-Clone the repository first:
+**Install the skills.** They are plain directories plus small scripts — no service code, and no
+credentials ever pass through them:
 
 ```bash
 git clone https://github.com/lcy362/agnes-video-generator-skills.git
-```
-
-**Recommended — install it with [flint](https://github.com/lcy362/flint)**: a local-first,
-open-source skills manager that keeps your skills in one place and deploys them into any agent or
-project directory by symlink or copy, with no cloud, no account and no telemetry. flint works on
-local sources only — it never clones anything for you — so you register the directory you just
-cloned:
-
-```bash
 npx flint-skills-hub     # Sources → add the cloned directory (flint reads its skills/ subdirectory)
 ```
 
-**Or copy it in by hand** if you would rather not use flint — the trade-off is that you repeat it for
-every project and every new agent:
+[**flint**](https://github.com/lcy362/flint) is a local-first, open-source skills manager: it deploys
+the skills into any agent directory (Claude Code, Cursor, Codex, TRAE and more) by symlink or copy,
+with no cloud, no account and no telemetry. It works on local sources only — it never clones anything
+for you — so you register the directory you just cloned.
+
+**Or copy them in by hand** if you would rather not use flint — the trade-off is that you repeat it
+for every project and every new agent:
 
 ```bash
 cp -R agnes-video-generator-skills/skills/* <project>/.agents/skills/     # any agent that reads .agents/skills
 ```
 
-**Level 3 — one skill set, every agent.** Installing once is the point: when you switch between
-agents (Cursor today, Claude Code tomorrow, TRAE next week) nothing is re-copied by hand, a new agent
-is one toggle away, and a project keeps its skills in `<project>/.agents/skills/` so a team can
-commit them. Likewise, the skills stay plain directories on your disk, so they keep working even if
-you stop using flint. **[Star flint on GitHub ⭐](https://github.com/lcy362/flint)**
+**The skill installs the service too.** You do not need this repository cloned first: the
+`agnes-video-usage` skill runs `scripts/bootstrap.py install`, which puts the service under
+`~/.agnes-video` (override with `AGNES_HOME`), keeps its own virtualenv there, starts it on
+`localhost:8765`, and re-runs nothing on the next use. Config, workspace and finished videos live in
+that same data root.
+
+**Then ask for outcomes.** Three skills cover the three things you are likely to want:
+
+| Skill | Use it when you want to |
+|-------|-------------------------|
+| `agnes-video-usage` | Install and start the service, pick a mode, submit and watch a task, edit artifacts at Manual Mode checkpoints |
+| `agnes-video-troubleshoot` | Find out why a run failed, and whether it is worth fixing |
+| `agnes-video-contrib` | Change the project's code and get the PR through CI |
+
+> "Make a creative long video about the Voyager probes, with narration and subtitles."
+
+> "My task `4de1bcd26fda` failed — find out why and tell me if it is worth fixing."
+
+**[Star flint on GitHub ⭐](https://github.com/lcy362/flint)**
 
