@@ -34,13 +34,11 @@ Absolutely. The project is designed for self-hosting. Just clone the repo, run `
 
 ### Can an AI agent operate this project for me?
 
-Yes — it was designed for that. The repository ships [`AGENTS.md`](../../AGENTS.md), written for AI coding assistants: clone the project, tell your agent to read it, install dependencies, configure the API key and start the server, then ask it to "run the deployment verification checks". It will walk the four-layer checklist and report the results.
+Yes — it was designed for that. Install the standalone **[`agnes-video` skill](https://github.com/lcy362/agnes-video-generator-skills)**: it installs the service under `~/.agnes-video` on demand, generates the video, delivers the file, diagnoses failures and — with your agreement — fixes a real defect and opens a PR. You never clone this project or memorise a command; you describe the outcome. (The repository still ships [`AGENTS.md`](../../AGENTS.md) for changing its code.) Full guide: **[Let an AI Agent Operate This Project](./agent-operations.md)**.
 
-If you would rather not have the agent work the project out first, install the **[companion skill set](https://github.com/lcy362/agnes-video-generator-skills)** — three ready-made skills (`usage`, `troubleshoot`, `contrib`) plus small scripts for task control, deployment verification and evidence collection. Full guide: **[Let an AI Agent Operate This Project](./agent-operations.md)**.
+### I use several AI agents — how do I keep the skill in sync?
 
-### I use several AI agents — how do I keep the skills in sync?
-
-Register the skill repository once in [flint](https://github.com/lcy362/flint), a local-first skills manager: it keeps your skills in one place and symlinks or copies them into every agent and project directory you use, so a new agent is one toggle away. It runs entirely locally — no cloud, no account, no telemetry. Install with `npx flint-skills-hub` (UI on `http://localhost:8787`). See [Let an AI Agent Operate This Project](./agent-operations.md) for the whole picture.
+Register the skill repository once in [flint](https://github.com/lcy362/flint), a local-first skills manager: it keeps the skill in one place and symlinks or copies it into every agent and project directory you use, so a new agent is one toggle away. It runs entirely locally — no cloud, no account, no telemetry. Install with `npx flint-skills-hub` (UI on `http://localhost:8787`). See [Let an AI Agent Operate This Project](./agent-operations.md) for the whole picture.
 
 ### What should I do when generation fails?
 

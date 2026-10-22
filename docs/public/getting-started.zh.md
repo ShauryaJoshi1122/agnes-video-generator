@@ -151,56 +151,32 @@ ffmpeg -version
 
 ## 方式 D：AI Agent 辅助部署
 
-本项目专为 AI 编程助手友好设计。接入方式有三档，够用就停。权威说明见
+本项目由一个 skill 驱动：装一次，之后只描述想要的结果，不必再敲命令。权威说明见
 **[让 AI Agent 来操作本项目](agent-operations.zh.md)**。
 
-**第一档 —— 把 Agent 指向本仓库。** 先由你下载代码并准备好 API Key：
-
-```bash
-git clone https://github.com/lcy362/agnes-video-generator.git
-cd agnes-video-generator
-```
-
-然后告诉你的 Agent：
-
-> "阅读这个项目的 AGENTS.md，安装依赖，配置 API Key `<your-key>`，然后启动服务。"
-
-Agent 会读取 `AGENTS.md`（一份完整的部署指引），自动完成：环境检查（Python 3.10+、ffmpeg）、`pip install`、服务启动和 API Key 写入。启动后还可以让 Agent 验证部署：
-
-> "跑一下部署验证检查。"
-
-Agent 会按 `AGENTS.md` 中的四层验证清单（连通性 → 静态分析 → 端点测试 → 字幕功能）逐项执行并汇报结果。
-
-**第二档 —— 装上伴随技能库。** `AGENTS.md` 讲的是怎么*改*这个项目；伴随技能库讲的是怎么*操作*它，
-让 Agent 不必先把这个项目摸一遍。技能库含三个技能——`agnes-video-usage`（部署、选模式、提交并观察任务、
-在手动模式检查点改产物）、`agnes-video-troubleshoot`（查清一次失败的真正原因）、
-`agnes-video-contrib`（改代码并让 PR 通过 CI）——以及任务控制、部署验证、取证、媒体校验与本地 CI 门禁等小脚本：
-
-> **[lcy362/agnes-video-generator-skills](https://github.com/lcy362/agnes-video-generator-skills)**
-
-先把仓库 clone 下来：
+**装这个 skill。** 它只是普通目录加几个小脚本——不含服务代码，也不经手任何密钥：
 
 ```bash
 git clone https://github.com/lcy362/agnes-video-generator-skills.git
-```
-
-**推荐——用 [flint](https://github.com/lcy362/flint) 安装**：它是一个本地优先的开源技能管理器：
-把技能集中在一处，通过 symlink 或复制投放到任意 Agent 目录与项目目录，无云端、无账号、无上报。
-flint 只认本地源、不会替你联网拉取，所以要登记的就是刚 clone 下来的这个目录：
-
-```bash
 npx flint-skills-hub     # Sources → 添加刚 clone 的目录（flint 会读它的 skills/ 子目录）
 ```
+
+[**flint**](https://github.com/lcy362/flint) 是一个本地优先的开源技能管理器：通过 symlink 或复制把这个 skill 投放到任意 Agent 目录（Claude Code、Cursor、Codex、TRAE 等），无云端、无账号、无上报。它只认**本地**源——不会替你联网拉取任何东西，所以要登记的就是刚 clone 下来的那个目录。
 
 **或者手动拷贝**——不用 flint 也行，代价是每个项目、每上一个新 Agent 都要再来一次：
 
 ```bash
-cp -R agnes-video-generator-skills/skills/* <项目>/.agents/skills/     # 任何读 .agents/skills 的 Agent 都能用
+cp -R agnes-video-generator-skills/skills/agnes-video <项目>/.agents/skills/   # 任何读 .agents/skills 的 Agent 都能用
 ```
 
-**第三档 —— 一套技能，所有 Agent。** 装一次才是重点：以后在 Cursor / Claude Code / TRAE 之间切换不用手工再拷，
-新增 Agent 只需一键，项目级技能放在 `<项目>/.agents/skills/` 还能提交进 git 全组共用；
-而且技能始终是你磁盘上的普通目录，**即使以后不用 flint 了也照常可用**。
+**服务也由 skill 装。** 你不必先 clone 本仓库：skill 会跑 `scripts/bootstrap.py install`，把服务装进 `~/.agnes-video`（可用 `AGNES_HOME` 覆盖），在同一处维护自己的 virtualenv，在 `localhost:8765` 启动，并且第二次使用不重复安装。配置、工作区、成片与日志都在这同一个数据根目录里。
+
+**然后，交代结果。** 这个 skill 是一条闭环——安装、创作、交付、排查，以及（在你同意后）修一个真正的缺陷并提交 PR：
+
+> "做一条关于旅行者号的创意长视频，要旁白和字幕。"
+
+> "我的任务 `4de1bcd26fda` 失败了——查清原因，并告诉我值不值得修。"
+
 **[去 GitHub 给 flint 点个 Star ⭐](https://github.com/lcy362/flint)**
 
 

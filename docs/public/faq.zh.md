@@ -34,13 +34,11 @@
 
 ### 能让 AI Agent 来操作这个项目吗？
 
-可以，本项目就是按这个思路设计的。仓库自带为 AI 编程助手写的 [`AGENTS.md`](../../AGENTS.md)：clone 之后让你的 Agent 读它、安装依赖、配置 API Key、启动服务，再让它"跑一下部署验证检查"——它会按四层验证清单逐项执行并汇报结果。
+可以，本项目就是按这个思路设计的。装一个独立的 **[`agnes-video` skill](https://github.com/lcy362/agnes-video-generator-skills)**：它会按需把服务装进 `~/.agnes-video`，然后出片、交付文件、排查失败，并在你同意后修一个真正的缺陷、提交 PR。你不必 clone 本项目，也不用记命令，只描述想要的结果。（`AGENTS.md` 仍在仓库里，用于修改本项目代码。）完整说明见 **[让 AI Agent 来操作本项目](./agent-operations.zh.md)**。
 
-如果你不想让 Agent 先把这个项目摸一遍，可以装上 **[伴随技能库](https://github.com/lcy362/agnes-video-generator-skills)**：三个现成技能（使用 / 排障 / 贡献），外加任务控制、部署验证、取证等小脚本。完整说明见 **[让 AI Agent 来操作本项目](./agent-operations.zh.md)**。
+### 我同时在用好几个 AI Agent，这个 skill 怎么保持同步？
 
-### 我同时在用好几个 AI Agent，技能怎么保持同步？
-
-把技能库在 [flint](https://github.com/lcy362/flint) 里登记一次即可。flint 是本地优先的技能管理器：把技能集中在一处，通过 symlink 或复制投放到你用到的每个 Agent 目录与项目目录，将来新增 Agent 只需一键分发。它完全本地运行——无云端、无账号、无上报。安装：`npx flint-skills-hub`（界面在 `http://localhost:8787`）。整体思路见 **[让 AI Agent 来操作本项目](./agent-operations.zh.md)**。
+把技能库在 [flint](https://github.com/lcy362/flint) 里登记一次即可。flint 是本地优先的技能管理器：把 skill 集中在一处，通过 symlink 或复制投放到你用到的每个 Agent 目录与项目目录，将来新增 Agent 只需一键分发。它完全本地运行——无云端、无账号、无上报。安装：`npx flint-skills-hub`（界面在 `http://localhost:8787`）。整体思路见 **[让 AI Agent 来操作本项目](./agent-operations.zh.md)**。
 
 ### 生成失败了怎么办？
 

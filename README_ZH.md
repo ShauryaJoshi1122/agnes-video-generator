@@ -73,37 +73,44 @@ schema.org 结构化数据，供搜索引擎与 AI 引擎索引。GitHub 不会�
 |------|---------|---------|------|
 | **[Agnes Video Generator](https://github.com/lcy362/agnes-video-generator)**（本项目） | **下载后本地运行** | **功能更强大** —— TTS 配音、自动字幕、数字人、图生视频、关键帧动画、文章成片、断点续传等 | [GitHub](https://github.com/lcy362/agnes-video-generator) |
 | **[FreeShortVideoStudio](https://github.com/lcy362/free-short-video-studio)** | **完全在线，浏览器内运行** | 轻量免安装、零配置，**功能建设中** | [video.lichuanyang.top/studio](https://video.lichuanyang.top/studio) · [GitHub](https://github.com/lcy362/free-short-video-studio) |
-| **[Agnes Video Generator](https://github.com/lcy362/agnes-video-generator)** —— **支持 AI Agent 驱动** | **交给 AI 编程 Agent 运行** | **最省事** —— 仓库自带 [`AGENTS.md`](AGENTS.md) 与伴随技能库（使用 / 排障 / 贡献）：Agent 自己把项目装好、把片子做出来、把失败查清楚 | [Agent 使用指南](docs/public/agent-operations.zh.md) · [Flint](https://github.com/lcy362/flint) |
+| **[Agnes Video Generator](https://github.com/lcy362/agnes-video-generator)** —— **支持 AI Agent 驱动** | **交给 AI 编程 Agent 运行** | **最省事** —— 装一个独立的 `agnes-video` skill：它自己装服务、出片、交付成片，失败时排查原因，还能为真正的缺陷提 PR | [技能库仓库](https://github.com/lcy362/agnes-video-generator-skills) · [Flint](https://github.com/lcy362/flint) |
 
 ## 🤖 或者，让 AI Agent 来操作
 
-本项目自带一份为 AI 编程助手写的 [`AGENTS.md`](AGENTS.md)：Agent 读完这一份文档，就能把项目装好、把片子做出来、把失败查清楚。clone 之后直接告诉你的 Agent：
-
-> "阅读这个项目的 AGENTS.md，安装依赖，配置 API Key `<your-key>`，然后启动服务。"
-
-再让它证明部署真的可用：`"跑一下部署验证检查。"` —— 它会按四层验证清单（连通性 → 静态分析 → 端点测试 → 功能检查）逐项执行并汇报结果。
-
-**想让 Agent 省掉"现学"这一步？** 装上伴随技能库——三个现成技能（**使用**：部署、选模式、提交并观察任务、在手动模式检查点改产物；**排障**：查清一次失败的真正原因；**贡献**：改代码并让 PR 通过 CI），外加任务控制、部署验证、取证、媒体校验与本地 CI 门禁等小脚本：
-
-**[lcy362/agnes-video-generator-skills](https://github.com/lcy362/agnes-video-generator-skills)**
-
-先把仓库 clone 下来：
+装上**一个 skill**，之后只描述想要的结果。`agnes-video` 会自己装服务、出片、交付文件并排查失败——**你不必 clone 本仓库**，这个 skill 也是独立的，不只是本项目的附属。
 
 ```bash
 git clone https://github.com/lcy362/agnes-video-generator-skills.git
-```
-
-**推荐——交给 [flint](https://github.com/lcy362/flint) 安装与分发。** flint 是一个本地优先的开源技能管理器：把技能集中在一处，通过 symlink 或复制投放到任意 Agent 目录与项目目录。它只认本地源、**不会替你联网拉取**，所以你要登记的就是刚 clone 下来的这个目录；登记之后，三个技能就出现在你用的每个 Agent 面前：
-
-```bash
 npx flint-skills-hub     # Sources → 添加刚 clone 的目录（flint 会读它的 skills/ 子目录）
 ```
+
+[**flint**](https://github.com/lcy362/flint) 是一个本地优先的开源技能管理器：通过 symlink 或复制把这个 skill 投放到任意 Agent 目录（Claude Code、Cursor、Codex、TRAE 等），无云端、无账号、无上报。它只认本地源、**不会替你联网拉取**，所以你要登记的就是刚 clone 下来的这个目录。
 
 **或者手动拷贝**——不用 flint 也行，代价是每个项目、每上一个新 Agent 都要再来一次：
 
 ```bash
-cp -R agnes-video-generator-skills/skills/* <项目>/.agents/skills/     # 任何读 .agents/skills 的 Agent 都能用
+cp -R agnes-video-generator-skills/skills/agnes-video <项目>/.agents/skills/   # 任何读 .agents/skills 的 Agent 都能用
 ```
+
+**服务也由 skill 装。** 它会跑 `scripts/bootstrap.py install`，把服务装进 `~/.agnes-video`（可用 `AGNES_HOME` 覆盖），在同一处维护自己的 virtualenv，在 `localhost:8765` 启动，并且第二次使用不重复安装。配置、工作区、成片与日志都在这同一个数据根目录里。
+
+**然后，交代结果** —— 不用命令、不用参数：
+
+> "做一条关于旅行者号的创意长视频，要旁白和字幕。"
+
+> "我的任务 `4de1bcd26fda` 失败了——查清原因，并告诉我值不值得修。"
+
+> "拿我那个已完成的任务，把分镜提示词优化一下，然后只重跑受影响的部分。"
+
+一条闭环、五个阶段，而且始终在同一个 skill 里，前后不丢上下文：
+
+| 阶段 | 具体做什么 |
+|------|------------|
+| 安装 | 把服务装进 `~/.agnes-video`，并通过真实端点验证可用 |
+| 创作 | 选流水线，安全接收 Key，提交任务，汇报进度 |
+| 交付 | 把文件复制到 `$AGNES_HOME/outputs/<task_id>/`，报告路径、时长与分辨率 |
+| 排查 | 把失败归类为配置问题、上游容量问题或真正的缺陷 |
+| 修复 | 在你同意后：fork、修一个小缺陷、跑自检、提交 PR |
 
 完整说明：**[让 AI Agent 来操作本项目](docs/public/agent-operations.zh.md)**。
 
@@ -191,7 +198,7 @@ cp .env.example .env    # 然后编辑其中的 AGNES_API_KEY
 
 - **[核心功能](docs/public/features.zh.md)** — 多种创作模式、完全免费的 AI 模型链、AI 旁白配音与智能字幕、灵活的创作控制、生产级可靠性与多语言 Web UI。
 - **[快速开始](docs/public/getting-started.zh.md)** — 4 种部署方式：手动（`start.sh`）、Docker、npm（`npx free-short-video`）、AI Agent 辅助。
-- **[AI Agent 操作指南](docs/public/agent-operations.zh.md)** — Agent 驱动本项目的三档方式：把 `AGENTS.md` 交给它、装上伴随技能库、或用 flint 分发到每个 Agent。
+- **[AI Agent 操作指南](docs/public/agent-operations.zh.md)** — 用编程 Agent 驱动本项目：装一次独立的 `agnes-video` skill，之后交代结果即可——它自己装服务、出片、排查失败，还能为真正的缺陷提 PR。
 - **[使用说明](docs/public/usage.zh.md)** — 配置 API Key、选择视频模式、断点续传、三种串联模式，以及日志与输出目录。
 - **[项目架构](docs/public/architecture.zh.md)** — 项目结构与技术栈。
 - **[API 接口](docs/public/api.zh.md)** — 完整 REST 接口列表（进度经任务状态轮询获取，无 WebSocket）。

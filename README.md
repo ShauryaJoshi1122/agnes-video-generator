@@ -73,12 +73,13 @@ schema.org structured data for SEO/GEO indexing. GitHub does not execute this sc
 |---------|-----------|----------|------|
 | **[Agnes Video Generator](https://github.com/lcy362/agnes-video-generator)** (this project) | **Download & run locally** | **More powerful** — TTS narration, auto subtitles, digital anchor, image-to-video, keyframes animation, manuscript-to-video, checkpoint resume & more | [GitHub](https://github.com/lcy362/agnes-video-generator) |
 | **[FreeShortVideoStudio](https://github.com/lcy362/free-short-video-studio)** | **Fully online, in the browser** | Lightweight, zero install — no setup at all, **features under active construction** | [video.lichuanyang.top/studio](https://video.lichuanyang.top/studio) · [GitHub](https://github.com/lcy362/free-short-video-studio) |
-| **[Agnes Video Generator](https://github.com/lcy362/agnes-video-generator)** — **agent-ready** | **Driven by an AI coding agent** | **Least effort** — install one skill set (usage / troubleshoot / contrib): the agent installs the service, generates the video and debugs failures itself, no clone needed | [Agent guide](docs/public/agent-operations.md) · [Flint](https://github.com/lcy362/flint) |
+| **[Agnes Video Generator](https://github.com/lcy362/agnes-video-generator)** — **agent-ready** | **Driven by an AI coding agent** | **Least effort** — install the standalone `agnes-video` skill: it installs the service, generates the video, delivers the file, debugs failures and can open a PR for a real defect | [Skill repository](https://github.com/lcy362/agnes-video-generator-skills) · [Flint](https://github.com/lcy362/flint) |
 
 ## 🤖 Or Let an AI Agent Drive It
 
-Install one skill set, then describe the result you want. The agent installs the service, makes the
-video and debugs failures itself — **you never clone this repository**.
+Install **one skill**, then describe the result you want. The `agnes-video` skill installs the
+service, makes the video, delivers the file and diagnoses failures — **you never clone this
+repository**, and the skill is useful on its own, not just as an add-on to this project.
 
 ```bash
 git clone https://github.com/lcy362/agnes-video-generator-skills.git
@@ -86,20 +87,20 @@ npx flint-skills-hub     # Sources → add the cloned directory (flint reads its
 ```
 
 [**flint**](https://github.com/lcy362/flint) is a local-first, open-source skills manager: it deploys
-the skills into any agent directory (Claude Code, Cursor, Codex, TRAE and more) by symlink or copy,
+the skill into any agent directory (Claude Code, Cursor, Codex, TRAE and more) by symlink or copy,
 with no cloud, no account and no telemetry. It works on local sources only — it never clones anything
 for you — so you register the directory you just cloned.
 
 **Or copy it in by hand** — no flint required, but you repeat it for every project and every new agent:
 
 ```bash
-cp -R agnes-video-generator-skills/skills/* <project>/.agents/skills/     # any agent that reads .agents/skills
+cp -R agnes-video-generator-skills/skills/agnes-video <project>/.agents/skills/   # any agent that reads .agents/skills
 ```
 
-**The skill installs the service too.** `agnes-video-usage` runs `scripts/bootstrap.py install`, which
-puts the service under `~/.agnes-video` (override with `AGNES_HOME`), keeps its own virtualenv there,
-starts it on `localhost:8765`, and re-runs nothing on the next use. Config, workspace and finished
-videos live in that same data root.
+**The skill installs the service too.** It runs `scripts/bootstrap.py install`, which puts the
+service under `~/.agnes-video` (override with `AGNES_HOME`), keeps its own virtualenv there, starts it
+on `localhost:8765`, and re-runs nothing on the next use. Config, workspace, outputs and logs live in
+that same data root.
 
 **Then ask for outcomes** — no commands, no flags:
 
@@ -109,13 +110,15 @@ videos live in that same data root.
 
 > "Take my finished task, improve the storyboard prompts, and regenerate only the affected scenes."
 
-Three skills cover the three things you are likely to want:
+One loop, five stages — and it stays in the same skill, so nothing is lost between them:
 
-| Skill | Use it when you want to |
-|-------|-------------------------|
-| `agnes-video-usage` | Install and start the service, pick a mode, submit and watch a task, edit artifacts at Manual Mode checkpoints |
-| `agnes-video-troubleshoot` | Find out why a run failed, and whether it is worth fixing |
-| `agnes-video-contrib` | Change the project's code and get the PR through CI |
+| Stage | What it does |
+|-------|--------------|
+| Install | Bootstrap the service under `~/.agnes-video` and verify it through the real endpoints |
+| Create | Pick the pipeline, take the key safely, submit the task, report progress |
+| Deliver | Copy the file to `$AGNES_HOME/outputs/<task_id>/` and report path, duration, resolution |
+| Diagnose | Classify a failure as configuration, upstream capacity, or a genuine defect |
+| Fix | After you agree: fork, fix a small defect, run pre-flight, open a PR |
 
 Full guide: **[Let an AI Agent Operate This Project](docs/public/agent-operations.md)**.
 
@@ -203,7 +206,7 @@ Full walkthrough: [Getting Started → Configure API Key](docs/public/getting-st
 
 - **[Features](docs/public/features.md)** — Creation modes, the completely free AI model chain, AI narration & smart subtitles, flexible creative controls, production-grade reliability, and the multilingual Web UI.
 - **[Getting Started](docs/public/getting-started.md)** — Install and deploy in 4 ways: Manual (`start.sh`), Docker, npm (`npx free-short-video`), or AI-Agent assisted.
-- **[AI Agent Operations](docs/public/agent-operations.md)** — How to drive this project with a coding agent: install the companion skill set once, then ask for outcomes — the agent deploys the service, generates videos and debugs failures.
+- **[AI Agent Operations](docs/public/agent-operations.md)** — How to drive this project with a coding agent: install the standalone `agnes-video` skill once, then ask for outcomes — it installs the service, generates videos, diagnoses failures and can open a PR for a real defect.
 - **[Usage Guide](docs/public/usage.md)** — Configure your API key, pick a video mode, resume from checkpoints, the three chaining modes, and logs & output layout.
 - **[Architecture](docs/public/architecture.md)** — Project structure and tech stack.
 - **[API Reference](docs/public/api.md)** — Full REST endpoint list (progress via polling, no WebSocket).

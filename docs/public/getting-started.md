@@ -168,12 +168,12 @@ ffmpeg -version
 
 ## Option D: AI Agent Assisted Setup
 
-This project is built to be operated by an AI coding assistant. Install the companion skill set once,
+This project is built to be driven by an AI coding assistant through **one skill**. Install it once,
 then describe the outcome you want instead of running commands. The authoritative description is
 **[Let an AI Agent Operate This Project](agent-operations.md)**.
 
-**Install the skills.** They are plain directories plus small scripts — no service code, and no
-credentials ever pass through them:
+**Install the skill.** It is a plain directory plus small scripts — no service code, and no
+credentials ever pass through it:
 
 ```bash
 git clone https://github.com/lcy362/agnes-video-generator-skills.git
@@ -181,30 +181,24 @@ npx flint-skills-hub     # Sources → add the cloned directory (flint reads its
 ```
 
 [**flint**](https://github.com/lcy362/flint) is a local-first, open-source skills manager: it deploys
-the skills into any agent directory (Claude Code, Cursor, Codex, TRAE and more) by symlink or copy,
+the skill into any agent directory (Claude Code, Cursor, Codex, TRAE and more) by symlink or copy,
 with no cloud, no account and no telemetry. It works on local sources only — it never clones anything
 for you — so you register the directory you just cloned.
 
-**Or copy them in by hand** if you would rather not use flint — the trade-off is that you repeat it
+**Or copy it in by hand** if you would rather not use flint — the trade-off is that you repeat it
 for every project and every new agent:
 
 ```bash
-cp -R agnes-video-generator-skills/skills/* <project>/.agents/skills/     # any agent that reads .agents/skills
+cp -R agnes-video-generator-skills/skills/agnes-video <project>/.agents/skills/   # any agent that reads .agents/skills
 ```
 
-**The skill installs the service too.** You do not need this repository cloned first: the
-`agnes-video-usage` skill runs `scripts/bootstrap.py install`, which puts the service under
-`~/.agnes-video` (override with `AGNES_HOME`), keeps its own virtualenv there, starts it on
-`localhost:8765`, and re-runs nothing on the next use. Config, workspace and finished videos live in
-that same data root.
+**The skill installs the service too.** You do not need this repository cloned first: the skill runs
+`scripts/bootstrap.py install`, which puts the service under `~/.agnes-video` (override with
+`AGNES_HOME`), keeps its own virtualenv there, starts it on `localhost:8765`, and re-runs nothing on
+the next use. Config, workspace, outputs and logs live in that same data root.
 
-**Then ask for outcomes.** Three skills cover the three things you are likely to want:
-
-| Skill | Use it when you want to |
-|-------|-------------------------|
-| `agnes-video-usage` | Install and start the service, pick a mode, submit and watch a task, edit artifacts at Manual Mode checkpoints |
-| `agnes-video-troubleshoot` | Find out why a run failed, and whether it is worth fixing |
-| `agnes-video-contrib` | Change the project's code and get the PR through CI |
+**Then ask for outcomes.** The skill is one closed loop — install, create, deliver, diagnose, and
+(with your agreement) fix a real defect and open a PR:
 
 > "Make a creative long video about the Voyager probes, with narration and subtitles."
 
