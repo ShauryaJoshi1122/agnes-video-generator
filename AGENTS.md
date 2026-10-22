@@ -484,11 +484,11 @@ python scripts/scene_runner.py --endpoints         # 端点验证
 本文件面向**修改本项目代码**：共享约定、四层验证清单、BugFix / 回归 / 发版流程。
 它同时是「AI Agent 辅助部署」的落地载体（见 `docs/public/getting-started.md` 方式 D）。
 
-**操作类任务**（部署、建任务、观察进度、手动模式改产物、排障取证、按流程提 PR）已沉淀为外部伴随技能库，
+**操作类任务**（部署、建任务、观察进度、手动模式改产物、排障取证、按流程提 PR）已沉淀为外部的独立 skill，
 不必让 Agent 反复读本文件：
 
 > https://github.com/lcy362/agnes-video-generator-skills
-> —— `agnes-video-usage` / `agnes-video-troubleshoot` / `agnes-video-contrib`
+> —— `agnes-video`（一个 skill，一条闭环：安装 / 创作 / 交付 / 排查 / 修复）
 
 - 权威说明：`docs/public/agent-operations.md`（中英双语，官网与 wiki 均引用它）
 - 改动本文件或那份文档时，注意**两者口径保持一致**，不要出现两份真相

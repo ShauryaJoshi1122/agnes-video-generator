@@ -4,57 +4,54 @@
 > The website guide and the wiki page about agent usage both summarize this page — when they
 > disagree with it, this page wins.
 
-Agnes Video Generator was built to be operated by an AI coding assistant. You install one skill set,
-then you describe the result you want instead of running commands:
+Agnes Video Generator is built to be driven by **one skill**: `agnes-video`. You install it once,
+then describe the result you want instead of running commands.
 
 > "Make a 90-second poetry video from 'Quiet Night Thought' and add narration."
 
-That is the whole shape of it. The rest of this page is the install step, the three skills behind it,
-and what to do when you would rather not use an agent at all.
+The skill is standalone — it generates videos, and this project is what it drives. You do not clone
+this repository, and you do not install the service yourself: the skill installs it on demand under
+`~/.agnes-video` and reuses it afterwards.
 
 ---
 
-## 1. Install once
-
-The skills are plain directories plus small scripts — no service code, and no credentials ever pass
-through them. Clone them, then hand the directory to your agent:
+## 1. Install the skill once
 
 ```bash
 git clone https://github.com/lcy362/agnes-video-generator-skills.git
 npx flint-skills-hub      # opens the local UI on http://localhost:8787
-# Sources → add the cloned directory; flint reads the skills from its skills/ subdirectory
+# Sources → add the cloned directory; flint reads the skill from its skills/ subdirectory
 ```
 
 [**flint**](https://github.com/lcy362/flint) is a local-first, open-source skills manager. It deploys
-the skills into any agent directory (Claude Code, Cursor, Codex, TRAE and more) by symlink or copy,
+the skill into any agent directory (Claude Code, Cursor, Codex, TRAE and more) by symlink or copy,
 and it works on **local** sources only — it never clones anything for you. Local-only: no cloud, no
-account, no telemetry. The skills stay plain directories on your disk, so they keep working even if
+account, no telemetry. The skill stays a plain directory on your disk, so it keeps working even if
 you stop using flint. **[Star flint on GitHub ⭐](https://github.com/lcy362/flint)**
 
-No flint? Copy them in by hand:
+No flint? Copy it in by hand:
 
 ```bash
 git clone https://github.com/lcy362/agnes-video-generator-skills.git /tmp/agnes-skills
-cp -R /tmp/agnes-skills/skills/* .agents/skills/     # any agent that reads .agents/skills
+cp -R /tmp/agnes-skills/skills/agnes-video <project>/.agents/skills/   # any agent that reads .agents/skills
 ```
 
-### The skill installs the service too
+### The skill installs the service for you
 
-You do **not** need this repository cloned first. The `agnes-video-usage` skill runs
-`scripts/bootstrap.py install`, which:
+`scripts/bootstrap.py install`:
 
 - installs the service under `~/.agnes-video` (override with `AGNES_HOME`),
 - keeps its own virtualenv there, and re-runs `pip` only when requirements change,
 - starts the service on `localhost:8765` and verifies it through the real endpoints,
-- stores config, workspace and finished videos in that same data root.
+- stores config, workspace, outputs and logs in that same data root.
 
-Nothing is written into your current project, and the next run installs nothing again.
+Nothing is written into your project, and the next run installs nothing again.
 
 ---
 
 ## 2. Then ask for outcomes
 
-Once the skills are in front of your agent, stop writing commands and state the goal:
+Stop writing commands and state the goal:
 
 > Make a creative long video about the Voyager probes, with narration and subtitles.
 
@@ -64,22 +61,20 @@ Once the skills are in front of your agent, stop writing commands and state the 
 
 > Take my finished task, improve the storyboard prompts, and regenerate only the affected scenes.
 
-The agent picks the matching skill, deploys or reuses the service, submits the task, reports progress,
-and tells you where the file landed.
-
 ---
 
-## 3. What the three skills cover
+## 3. What the skill does: one loop, five stages
 
-| Skill | Use it when you want to |
-|-------|-------------------------|
-| **`agnes-video-usage`** | Go from nothing to finished videos: install and start the service, configure the key, pick among the six task types, submit and watch a task, and edit artifacts at Manual Mode checkpoints |
-| **`agnes-video-troubleshoot`** | Work out why a run failed: queue saturation, `401` domain mismatch, timeouts, wrong resolution, a sideways portrait video, or subtitles that broke after a resume — and decide whether it is configuration, upstream capacity, or something worth fixing |
-| **`agnes-video-contrib`** | Change the project's code and get the PR through CI: English commits, the frontend rebuild rule, i18n, tests and the large-version regression |
+| Stage | What happens |
+|-------|--------------|
+| **Install** | Probes the machine, asks before installing, starts and verifies the service |
+| **Create** | Picks the pipeline (simple / creative / manuscript / anchor / poetry / image), takes the API key through the web UI or stdin, submits the task |
+| **Deliver** | Reports deltas while it runs, then the absolute path, duration and resolution of the file |
+| **Diagnose** | On failure: evidence from the diagnostics endpoint, `error_logs` and `ffprobe`, then a classification — configuration, upstream capacity, or a real defect |
+| **Fix** | For a small reproducible defect, and only after you agree: fork, branch, fix, run the CI-equivalent pre-flight, open a PR |
 
-Each skill is a decision tree plus small scripts: `agnes_task.py` (create / poll / inspect a task),
-`verify_deploy.sh` (deployment checklist), `diagnose_task.py` (evidence collection), `check_media.py`
-(resolution and orientation), `preflight.sh` (local CI gate).
+Two boundaries worth stating: the skill **never releases** the project (maintainer-only, human
+review gate), and it **never changes code before you have seen the root cause** and agreed to the fix.
 
 Repository: [**lcy362/agnes-video-generator-skills**](https://github.com/lcy362/agnes-video-generator-skills)
 
@@ -115,4 +110,4 @@ because the Web UI is second-class.
 - [Usage Guide](usage.md) — modes, checkpoints, configuration
 - [Manual Mode Guide](manual_mode_guide.md) — checkpoints and the external-agent protocol
 - [API Reference](api.md) — the endpoints an agent drives
-- [FAQ](faq.md) — including "how do I keep the skills in sync across agents?"
+- [FAQ](faq.md) — including "how do I keep the skill in sync?"
