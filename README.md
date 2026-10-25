@@ -255,3 +255,7 @@ More projects by the same author:
 
 - **Code fix committed:** `core/audio/tts.py` now rejects an empty Edge-TTS audio stream before replacing the output file, and logs the saved audio byte count. This prevents a zero-byte MP3 from being mistaken for successful speech generation. Commit: `19c3535234d575dd7069b35c7ce9a8eef0ad05c2`.
 - **Test status:** source change committed; automated tests and a live Gujarati audio request have not been run in this environment. Do not treat this as proof that Gujarati speech generation works end-to-end.
+
+
+- **Gujarati TTS cache fix committed:** voice selection now happens before the cached-audio check. Gujarati scripts using the default voice select `gu-IN-DhwaniNeural` and use a voice-specific output filename, preventing an existing default-voice narration from being reused accidentally. Commit: `fdee3b5456b4f5d3033e41fb4ec508a40d93f9c4`.
+- **Verification status:** source re-read after commit and the expected change is present. No live Gujarati TTS request or end-to-end video test has run yet; deployment and real audio playback remain unverified.
