@@ -222,3 +222,25 @@ More projects by the same author:
 - **[Flint](https://github.com/lcy362/flint)** — Local-first AI skills manager: centralize, tag, deduplicate and deploy your Skills into any agent or project directory. If it helps you, a star is very welcome! ⭐
 
 **Keywords**: free AI video generator, AI video generation tool, text to video AI, free AI video maker, AI video creator, open source video generator, Agnes AI, text-to-video, image-to-video, keyframes video, AI narration, auto subtitles, multi-scene video, zero cost AI video, no subscription AI video tool, digital anchor, self-hosted AI video generator, open source alternative to Runway
+
+---
+
+## 🛠️ Gujarati AI News Anchor — Development Progress
+
+> Progress log for the Gujarati female news-anchor workflow. This section records only verified repository/deployment findings; a successful website build does **not** mean that audio or a talking-anchor video has been tested successfully.
+
+### Latest verified status — 25 October 2026
+
+- **Deployment:** Vercel deployment is `READY`; build logs report `Build Completed` and `Deployment completed`.
+- **Gujarati text-to-speech:** The repository declares `edge-tts` in `requirements.txt`. Actual Gujarati audio generation and playback have **not yet been verified**.
+- **Anchor lip-sync:** A successful end-to-end lip-sync test has **not yet been verified**.
+- **Video export/download:** A complete generated anchor video and its download have **not yet been verified**.
+
+### Next work
+
+1. Trace the existing voice-generation path and confirm it selects a Gujarati female voice for Gujarati scripts.
+2. Run a real Gujarati text-to-speech test and verify that audio is produced and playable.
+3. Connect the generated audio to the existing anchor-video workflow and test lip-sync.
+4. Verify the finished video and download path; record actual test results here.
+
+**Important:** This log is a progress record, not a claim that the unfinished tests have passed. It will be updated when a concrete code change or test result is confirmed.
