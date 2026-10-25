@@ -244,3 +244,11 @@ More projects by the same author:
 4. Verify the finished video and download path; record actual test results here.
 
 **Important:** This log is a progress record, not a claim that the unfinished tests have passed. It will be updated when a concrete code change or test result is confirmed.
+
+
+### Investigation update — 25 October 2026, 17:32 IST
+
+- **Code path inspected:** `core/pipelines/anchor_video.py` and `core/audio/tts.py`.
+- **Confirmed behavior:** the anchor pipeline generates Edge-TTS narration only when `audio_source=post_stitch`; `audio_source=model` intentionally skips the project's TTS step. A Gujarati script switches from the default Chinese voice to `gu-IN-DhwaniNeural`, while an explicitly chosen voice is preserved.
+- **Not yet verified:** the deployed service has not been run with a real Gujarati script/audio request, so voice availability, playable audio, lip-sync, and final video download remain unproven.
+- **Next engineering step:** verify the actual voice catalog and request/config path, then run a real Gujarati TTS smoke test before changing the lip-sync pipeline. No mock audio or demo result will be used.
