@@ -259,3 +259,12 @@ More projects by the same author:
 
 - **Gujarati TTS cache fix committed:** voice selection now happens before the cached-audio check. Gujarati scripts using the default voice select `gu-IN-DhwaniNeural` and use a voice-specific output filename, preventing an existing default-voice narration from being reused accidentally. Commit: `fdee3b5456b4f5d3033e41fb4ec508a40d93f9c4`.
 - **Verification status:** source re-read after commit and the expected change is present. No live Gujarati TTS request or end-to-end video test has run yet; deployment and real audio playback remain unverified.
+
+
+## Gujarati anchor lip-sync — current engineering status (2026-10-25)
+
+- Confirmed: `post_stitch` currently generates a short five-second image-to-video anchor clip, then loops it and overlays a separate TTS narration. This synchronizes the audio track with the video duration, but it does **not** synchronize mouth shapes to Gujarati phonemes.
+- Confirmed: repository code search did not find an existing Wav2Lip/lip-sync implementation or dedicated lip-sync provider integration.
+- The Gujarati TTS voice/cache fix is present on `feature/gujarati-news-anchor-lipsync`.
+- No new lip-sync implementation has been committed yet. A genuine solution needs a supported lip-sync model/service or an available model endpoint; simply changing FFmpeg timing cannot create accurate mouth movement. Do not mark a render as lip-synced unless that stage actually ran successfully.
+- Verification still required: generate a real Gujarati narration, run the selected lip-sync stage, inspect the output video/audio streams and playback, and then verify the deployed build. Vercel's deployment being READY only confirms deployment readiness, not that a real AI render works.
