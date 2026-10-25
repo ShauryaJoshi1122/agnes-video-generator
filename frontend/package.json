@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node -e \"require('fs').rmSync('../static/assets',{recursive:true,force:true})\" && vue-tsc --noEmit && vite build",
+    "build": "vue-tsc --noEmit && vite build",
     "test": "vitest run",
     "preview": "vite preview"
   },

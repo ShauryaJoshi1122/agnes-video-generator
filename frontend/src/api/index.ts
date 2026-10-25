@@ -17,21 +17,34 @@ function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
   return fetch(url, { ...options, headers: withUiLangHeader(options.headers) })
 }
 
-async function request<T = any>(url: string, options?: RequestInit): Promise<T> {
-  const r = await apiFetch(url, options)
-  // 3.1：统一检查 r.ok——此前 5xx / 错误页（HTML）会被误解析成 JSON 抛出
-  // 误导性错误；现在抛带后端 detail 的可读错误
-  if (!r.ok) {
-    let detail = ''
+async function parseResponse<T = any>(r: Response): Promise<T> {
+  // Read the body once so plain-text/HTML gateway errors never leak a JSON SyntaxError.
+  const body = await r.text()
+  let data: any = null
+  if (body.trim()) {
     try {
-      const d = await r.json()
-      detail = d?.detail || d?.error || ''
+      data = JSON.parse(body)
     } catch {
-      /* 非 JSON 响应体（如 502 错误页） */
+      const snippet = body.replace(/\\s+/g, ' ').trim().slice(0, 180)
+      if (!r.ok) {
+        throw new Error(snippet || `Request failed (HTTP ${r.status})`)
+      }
+      throw new Error(`Server returned a non-JSON response (HTTP ${r.status})${snippet ? `: ${snippet}` : ''}`)
     }
-    throw new Error(detail || `请求失败 (HTTP ${r.status})`)
   }
-  return r.json()
+  if (!r.ok) {
+    const detail = data?.detail || data?.error || data?.message
+    throw new Error(typeof detail === 'string' ? detail : `Request failed (HTTP ${r.status})`)
+  }
+  if (!body.trim()) {
+    if (r.status === 204) return undefined as T
+    throw new Error(`Server returned an empty response (HTTP ${r.status})`)
+  }
+  return data as T
+}
+
+async function request<T = any>(url: string, options?: RequestInit): Promise<T> {
+  return parseResponse<T>(await apiFetch(url, options))
 }
 
 // ── 配置 ──
@@ -54,13 +67,13 @@ export function saveConfigKeys(keys: string[], append = false) {
   const form = new FormData()
   form.append('keys_json', JSON.stringify(keys))
   if (append) form.append('append', 'true')
-  return apiFetch('/api/config/keys', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/config/keys', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 export function removeConfigKey(id: string) {
   // 用掩码接口返回的稳定 id 定位删除，不回传 Key 明文
   const form = new FormData()
   form.append('id', id)
-  return apiFetch('/api/config/keys', { method: 'DELETE', body: form }).then((r) => r.json())
+  return apiFetch('/api/config/keys', { method: 'DELETE', body: form }).then((r) => parseResponse(r))
 }
 export function saveDomain(domain: string) {
   const form = new FormData()
@@ -72,13 +85,13 @@ export function saveConfigKeyDomain(id: string, domain: string) {
   const form = new FormData()
   form.append('id', id)
   form.append('domain', domain)
-  return apiFetch('/api/config/keys/domain', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/config/keys/domain', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 // per-key 域名自动探测：逐 key 按候选域名探测，返回每个 key 的探测结果
 export function detectConfigKeyDomains(force = false) {
   const form = new FormData()
   if (force) form.append('force', 'true')
-  return apiFetch('/api/config/keys/detect', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/config/keys/detect', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 export function saveModels(models: { text?: string; image?: string; video?: string; text_provider?: string }) {
   const form = new FormData()
@@ -113,11 +126,11 @@ export function saveTextProvider(payload: {
   form.append('base_url', payload.base_url)
   form.append('api_key', payload.api_key)
   form.append('models_json', payload.models_json)
-  return apiFetch('/api/config/text-providers', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/config/text-providers', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 // 删除供应商（内置 agnes 返回 400）
 export function deleteTextProvider(id: string) {
-  return apiFetch('/api/config/text-providers/' + encodeURIComponent(id), { method: 'DELETE' }).then((r) => r.json())
+  return apiFetch('/api/config/text-providers/' + encodeURIComponent(id), { method: 'DELETE' }).then((r) => parseResponse(r))
 }
 // 用用户此刻输入的 key+base_url 探测拉模型列表（不落盘）
 export function testTextProvider(payload: { base_url: string; api_key: string; api: string; provider?: string }) {
@@ -126,7 +139,7 @@ export function testTextProvider(payload: { base_url: string; api_key: string; a
   form.append('api_key', payload.api_key)
   form.append('api', payload.api)
   if (payload.provider) form.append('provider', payload.provider)
-  return apiFetch('/api/config/text-providers/test', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/config/text-providers/test', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 // 将候选模型正式写入该供应商并落盘
 export function syncTextProviderModels(providerId: string, models: string[]) {
@@ -135,7 +148,7 @@ export function syncTextProviderModels(providerId: string, models: string[]) {
   return apiFetch('/api/config/text-providers/' + encodeURIComponent(providerId) + '/sync', {
     method: 'POST',
     body: form,
-  }).then((r) => r.json())
+  }).then((r) => parseResponse(r))
 }
 export function setWatermark(enabled: boolean) {
   const form = new FormData()
@@ -190,13 +203,13 @@ export function getTask(taskId: string) {
   return request('/api/tasks/' + taskId)
 }
 export function resumeTask(taskId: string) {
-  return apiFetch('/api/tasks/' + taskId + '/resume', { method: 'POST' }).then((r) => r.json())
+  return apiFetch('/api/tasks/' + taskId + '/resume', { method: 'POST' }).then((r) => parseResponse(r))
 }
 export function stopTask(taskId: string) {
-  return apiFetch('/api/tasks/' + taskId + '/stop', { method: 'POST' }).then((r) => r.json())
+  return apiFetch('/api/tasks/' + taskId + '/stop', { method: 'POST' }).then((r) => parseResponse(r))
 }
 export function deleteTask(taskId: string) {
-  return apiFetch('/api/tasks/' + taskId, { method: 'DELETE' }).then((r) => r.json())
+  return apiFetch('/api/tasks/' + taskId, { method: 'DELETE' }).then((r) => parseResponse(r))
 }
 
 // ── v6.1 问题反馈：任务诊断（二期）──
@@ -221,10 +234,10 @@ export function savePreset(name: string, prompt: string) {
   const form = new FormData()
   form.append('name', name)
   form.append('prompt', prompt)
-  return apiFetch('/api/presets', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/presets', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 export function deletePreset(id: string) {
-  return apiFetch('/api/presets/' + encodeURIComponent(id), { method: 'DELETE' }).then((r) => r.json())
+  return apiFetch('/api/presets/' + encodeURIComponent(id), { method: 'DELETE' }).then((r) => parseResponse(r))
 }
 
 // ── 产物 ──
@@ -251,10 +264,10 @@ export function getPoetryScenePrompt(params: Record<string, string>) {
 
 // ── 任务提交（FormData 多文件上传）──
 export function submitSimple(form: FormData) {
-  return apiFetch('/api/tasks/simple', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/tasks/simple', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 export function submitCreative(form: FormData) {
-  return apiFetch('/api/tasks/creative', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/tasks/creative', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 // ── 创意脚本预览（简易模式：输入主题 → 出分镜）──
 export function creativePreview(idea: string, contentLang: string, sceneCount: number) {
@@ -266,23 +279,23 @@ export function creativePreview(idea: string, contentLang: string, sceneCount: n
   return request('/api/creative/preview-script', { method: 'POST', body: form })
 }
 export function submitManuscript(form: FormData) {
-  return apiFetch('/api/tasks/manuscript', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/tasks/manuscript', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 export function submitAnchor(form: FormData) {
-  return apiFetch('/api/tasks/anchor', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/tasks/anchor', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 export function submitPoetry(form: FormData) {
-  return apiFetch('/api/tasks/poetry', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/tasks/poetry', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 export function submitImage(form: FormData) {
-  return apiFetch('/api/image/generate', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/image/generate', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 
 // ── v6.0 手动模式 ──
 export function switchTaskMode(taskId: string, mode: 'auto' | 'manual') {
   const form = new FormData()
   form.append('mode', mode)
-  return apiFetch('/api/tasks/' + taskId + '/mode', { method: 'POST', body: form }).then((r) => r.json())
+  return apiFetch('/api/tasks/' + taskId + '/mode', { method: 'POST', body: form }).then((r) => parseResponse(r))
 }
 export function getCheckpoints(taskId: string) {
   return request('/api/tasks/' + taskId + '/checkpoints')
@@ -318,12 +331,12 @@ export function approveCheckpoint(
   return apiFetch('/api/tasks/' + taskId + '/checkpoints/' + encodeURIComponent(checkpoint) + '/approve', {
     method: 'POST',
     body: form,
-  }).then((r) => r.json())
+  }).then((r) => parseResponse(r))
 }
 export function regenCheckpoint(taskId: string, checkpoint: string) {
   return apiFetch('/api/tasks/' + taskId + '/checkpoints/' + encodeURIComponent(checkpoint) + '/regen', {
     method: 'POST',
-  }).then((r) => r.json())
+  }).then((r) => parseResponse(r))
 }
 export function aiModify(taskId: string, checkpoint: string, artifactId: string, userRequest: string) {
   const form = new FormData()
@@ -340,7 +353,7 @@ export function uploadArtifact(taskId: string, artifactId: string, file: File) {
   return apiFetch('/api/tasks/' + taskId + '/artifacts/' + encodeURIComponent(artifactId) + '/upload', {
     method: 'POST',
     body: form,
-  }).then((r) => r.json())
+  }).then((r) => parseResponse(r))
 }
 
 // ── v7.6 外部素材模式：批量导入产物（归一化 + 探针回显）──

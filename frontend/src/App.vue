@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { t } from '@/i18n'
+import * as api from '@/api'
 import { useTheme } from '@/composables/useTheme'
 import { useToast } from '@/composables/useToast'
 import { useConfig } from '@/composables/useConfig'
@@ -64,7 +65,7 @@ onMounted(async () => {
   }
 
   try {
-    const cfg = await fetch('/api/config').then((r) => r.json())
+    const cfg = await api.getConfig()
     if (cfg.api_key) {
       appState.apiKeySource = cfg.source
     }
@@ -99,7 +100,7 @@ onMounted(async () => {
 
 async function autoReconnectRunningTask() {
   try {
-    const d = await fetch('/api/tasks').then((r) => r.json())
+    const d = await api.getTasks()
     const running = (d.tasks || []).find((t: any) => t.status === 'running' || t.status === 'queued')
     if (running) {
       appState.currentTaskType = running.task_type || 'creative'
