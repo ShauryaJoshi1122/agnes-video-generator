@@ -402,8 +402,10 @@ Output ONLY the motion prompt text, no JSON, no explanation.
 - 极小幅度的微点头或微表情变化（幅度小于 5%）。
 - 面部和身体位置应几乎静止——仿佛是静态照片\
   加上最微弱的真人微运动。
-- 嘴巴应几乎无运动（这是循环片段，音频在后期添加）。
-- 想象"活人肖像"——一张几乎静止但微微呼吸的照片。
+- 主播必须持续呈现自然、清晰可见的口播动作：嘴唇有轻柔连续的开合与发音变化，不能像静态照片一样闭嘴不动。
+- 口部动作幅度适中，保持专业新闻主播的自然节奏；避免夸张张嘴、鬼脸或大幅头部动作。
+- 为了让 5 秒片段可循环，动作节奏应平稳，首尾姿势接近；不要声称或依赖逐音节同步，因为音频会在后期叠加。
+- 想象"正在播报新闻的真人肖像"——有真实说话感，同时身体动作克制。
 - 20-40 词，使用与主播外貌描述相同的语言。
 - 不要描述环境、光线、服装或外貌。
 
@@ -431,8 +433,10 @@ CRITICAL RULES:
 - VERY slight micro-nod or micro-smile changes (under 5% amplitude).
 - The face and body position should appear nearly frozen — as if a static image
   with the faintest living-person micro-motions.
-- Mouth should have near-zero movement (this is a loop-clip, audio is added in post).
-- Think "living portrait" — a photo that barely breathes.
+- The anchor MUST show continuous, clearly visible natural speaking motion: gentle lip opening/closing and articulation; do not keep the mouth closed or nearly frozen.
+- Keep mouth motion moderate and professional, like a real news presenter reading to camera; avoid exaggerated mouth shapes, grimaces, or large head movements.
+- Keep the motion cadence smooth and loop-friendly, with a similar start/end posture. Do not claim or depend on phoneme-level synchronization because narration audio is added afterward.
+- Think "a real person presenting the news" — visibly speaking while keeping body motion restrained.
 - 20-40 words, in the SAME LANGUAGE as the anchor appearance description.
 - Do NOT describe environment, lighting, clothing, or appearance.
 
