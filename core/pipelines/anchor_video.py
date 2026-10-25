@@ -307,6 +307,12 @@ class AnchorPipeline(MultiScenePipeline):
             )
 
         audio_config = self._state.audio_config
+        # Gujarati anchor scripts must not inherit the global Chinese TTS default.
+        # Preserve any explicit non-default voice selected by the user.
+        if any("\u0A80" <= ch <= "\u0AFF" for ch in full_text) and audio_config.voice == "zh-CN-XiaoxiaoNeural":
+            audio_config = audio_config.model_copy(update={"voice": "gu-IN-DhwaniNeural"})
+            logger.info("[Anchor] Gujarati script detected; using Gujarati female TTS voice")
+
         await self._emit("audio", "running", self._t("progress.anchor.audio_running", n=len(full_text)), _PROGRESS_AUDIO_START)
 
         sub_maker = await self._generate_audio_with_fallback(
