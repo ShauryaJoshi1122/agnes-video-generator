@@ -8,6 +8,7 @@
     "frontend": {
       "root": "frontend",
       "framework": "vite",
+      "installCommand": "npm install",
       "buildCommand": "vite build --outDir dist",
       "outputDirectory": "dist",
       "bindings": [
