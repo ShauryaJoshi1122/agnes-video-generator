@@ -1,5 +1,5 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "$schema": "https://vercel.sh",
   "services": {
     "app": {
       "root": ".",
@@ -8,6 +8,7 @@
     "frontend": {
       "root": "frontend",
       "framework": "vite",
+      "outputDirectory": "dist",
       "bindings": [
         {
           "type": "service",
