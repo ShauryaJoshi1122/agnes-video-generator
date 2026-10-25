@@ -8,6 +8,7 @@
     "frontend": {
       "root": "frontend",
       "framework": "vite",
+      "buildCommand": "npm run build",
       "outputDirectory": "dist",
       "bindings": [
         {
@@ -23,8 +24,7 @@
     {
       "source": "/api/(.*)",
       "destination": {
-        "service": "app",
-        "path": "/api/$1"
+        "service": "app"
       }
     },
     {
