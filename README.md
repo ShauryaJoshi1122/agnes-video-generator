@@ -252,3 +252,6 @@ More projects by the same author:
 - **Confirmed behavior:** the anchor pipeline generates Edge-TTS narration only when `audio_source=post_stitch`; `audio_source=model` intentionally skips the project's TTS step. A Gujarati script switches from the default Chinese voice to `gu-IN-DhwaniNeural`, while an explicitly chosen voice is preserved.
 - **Not yet verified:** the deployed service has not been run with a real Gujarati script/audio request, so voice availability, playable audio, lip-sync, and final video download remain unproven.
 - **Next engineering step:** verify the actual voice catalog and request/config path, then run a real Gujarati TTS smoke test before changing the lip-sync pipeline. No mock audio or demo result will be used.
+
+- **Code fix committed:** `core/audio/tts.py` now rejects an empty Edge-TTS audio stream before replacing the output file, and logs the saved audio byte count. This prevents a zero-byte MP3 from being mistaken for successful speech generation. Commit: `19c3535234d575dd7069b35c7ce9a8eef0ad05c2`.
+- **Test status:** source change committed; automated tests and a live Gujarati audio request have not been run in this environment. Do not treat this as proof that Gujarati speech generation works end-to-end.
